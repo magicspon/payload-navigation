@@ -1,12 +1,34 @@
 import type { Payload } from 'payload'
-
 import config from '@payload-config'
 import { createPayloadRequest, getPayload } from 'payload'
-import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest'
 
-import { customEndpointHandler } from '../src/endpoints/customEndpointHandler.js'
+import { itemsAddHandler } from '../src/endpoints/items-add.js'
+import { itemsDeleteHandler } from '../src/endpoints/items-delete.js'
+import { itemsGetHandler } from '../src/endpoints/items-get.js'
+import { itemsUpdateHandler } from '../src/endpoints/items-update.js'
+import { parentOptionsHandler } from '../src/endpoints/parent-options.js'
+import { reorderHandler } from '../src/endpoints/reorder.js'
 
 let payload: Payload
+let navigationHandle: string
+let navigationId: string
+
+async function makeRequest(
+  url: string,
+  options: RequestInit = {},
+  user?: Record<string, unknown>,
+) {
+  const request = new Request(`http://localhost:3000${url}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  })
+  const payloadRequest = await createPayloadRequest({ config, request })
+  if (user) (payloadRequest as unknown as { user: unknown }).user = user
+  return payloadRequest
+}
+
+const adminUser = { id: 'admin', email: 'dev@payloadcms.com', collection: 'users' }
 
 afterAll(async () => {
   await payload.destroy()
@@ -16,37 +38,271 @@ beforeAll(async () => {
   payload = await getPayload({ config })
 })
 
-describe('Plugin integration tests', () => {
-  test('should query custom endpoint added by plugin', async () => {
-    const request = new Request('http://localhost:3000/api/my-plugin-endpoint', {
-      method: 'GET',
-    })
+beforeEach(async () => {
+  // Clean up and create a fresh navigation doc for each test
+  await payload.delete({ collection: 'menu_item', where: { id: { exists: true } } })
+  await payload.delete({ collection: 'navigation', where: { id: { exists: true } } })
 
-    const payloadRequest = await createPayloadRequest({ config, request })
-    const response = await customEndpointHandler(payloadRequest)
-    expect(response.status).toBe(200)
+  const nav = await payload.create({
+    collection: 'navigation',
+    data: { title: 'Test Menu', slug: 'test-menu' },
+  })
+  navigationId = nav.id
+  navigationHandle = nav.handle as string
+})
 
-    const data = await response.json()
-    expect(data).toMatchObject({
-      message: 'Hello from custom endpoint',
-    })
+describe('GET /navigation-plugin/items', () => {
+  test('returns empty array for new navigation', async () => {
+    const req = await makeRequest(
+      `/api/navigation-plugin/items?handle=${navigationHandle}`,
+      { method: 'GET' },
+      adminUser,
+    )
+    const res = await itemsGetHandler(req)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data).toEqual([])
   })
 
-  test('can create post with custom text field added by plugin', async () => {
-    const post = await payload.create({
-      collection: 'posts',
-      data: {
-        addedByPlugin: 'added by plugin',
+  test('returns 401 without user', async () => {
+    const req = await makeRequest(
+      `/api/navigation-plugin/items?handle=${navigationHandle}`,
+      { method: 'GET' },
+    )
+    await expect(itemsGetHandler(req)).rejects.toMatchObject({ status: 401 })
+  })
+
+  test('returns 400 without handle', async () => {
+    const req = await makeRequest('/api/navigation-plugin/items', { method: 'GET' }, adminUser)
+    await expect(itemsGetHandler(req)).rejects.toMatchObject({ status: 400 })
+  })
+})
+
+describe('POST /navigation-plugin/items', () => {
+  test('creates a url menu item', async () => {
+    const req = await makeRequest(
+      '/api/navigation-plugin/items',
+      {
+        method: 'POST',
+        body: JSON.stringify({ handle: navigationHandle, title: 'Home', type: 'url', url: 'https://example.com' }),
       },
-    })
-    expect(post.addedByPlugin).toBe('added by plugin')
+      adminUser,
+    )
+    const res = await itemsAddHandler(req)
+    expect(res.status).toBe(200)
+    const docs = await res.json()
+    expect(docs).toHaveLength(1)
+    expect(docs[0].title).toBe('Home')
+    expect(docs[0].type).toBe('url')
   })
 
-  test('plugin creates and seeds plugin-collection', async () => {
-    expect(payload.collections['plugin-collection']).toBeDefined()
+  test('creates a custom menu item', async () => {
+    const req = await makeRequest(
+      '/api/navigation-plugin/items',
+      {
+        method: 'POST',
+        body: JSON.stringify({ handle: navigationHandle, title: 'Products', type: 'custom', custom: '#products' }),
+      },
+      adminUser,
+    )
+    const res = await itemsAddHandler(req)
+    const docs = await res.json()
+    expect(docs[0].type).toBe('custom')
+  })
 
-    const { docs } = await payload.find({ collection: 'plugin-collection' })
+  test('creates a passive menu item', async () => {
+    const req = await makeRequest(
+      '/api/navigation-plugin/items',
+      {
+        method: 'POST',
+        body: JSON.stringify({ handle: navigationHandle, title: 'Services', type: 'passive', passive: 'Services' }),
+      },
+      adminUser,
+    )
+    const res = await itemsAddHandler(req)
+    const docs = await res.json()
+    expect(docs[0].type).toBe('passive')
+  })
 
-    expect(docs).toHaveLength(1)
+  test('returns 401 without user', async () => {
+    const req = await makeRequest(
+      '/api/navigation-plugin/items',
+      { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'X', type: 'url', url: 'https://x.com' }) },
+    )
+    await expect(itemsAddHandler(req)).rejects.toMatchObject({ status: 401 })
+  })
+
+  test('returns 400 for missing required fields', async () => {
+    const req = await makeRequest(
+      '/api/navigation-plugin/items',
+      { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'X' }) },
+      adminUser,
+    )
+    await expect(itemsAddHandler(req)).rejects.toMatchObject({ status: 400 })
+  })
+
+  test('updates navigation data JSON field after add', async () => {
+    const req = await makeRequest(
+      '/api/navigation-plugin/items',
+      {
+        method: 'POST',
+        body: JSON.stringify({ handle: navigationHandle, title: 'Home', type: 'url', url: '/' }),
+      },
+      adminUser,
+    )
+    await itemsAddHandler(req)
+
+    const nav = await payload.findByID({ collection: 'navigation', id: navigationId })
+    expect(nav.items).toBeDefined()
+    expect((nav.items as unknown[]).length).toBeGreaterThan(0)
+  })
+})
+
+describe('PUT /navigation-plugin/items/:id', () => {
+  test('updates a menu item', async () => {
+    // Create first
+    const createReq = await makeRequest(
+      '/api/navigation-plugin/items',
+      { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'Old', type: 'url', url: 'https://old.com' }) },
+      adminUser,
+    )
+    const docs = await (await itemsAddHandler(createReq)).json()
+    const itemId = docs[0].id
+
+    // Update
+    const updateReq = await makeRequest(
+      `/api/navigation-plugin/items/${itemId}`,
+      { method: 'PUT', body: JSON.stringify({ handle: navigationHandle, title: 'New', type: 'url', url: 'https://new.com' }) },
+      adminUser,
+    )
+    ;(updateReq as unknown as { routeParams: unknown }).routeParams = { id: itemId }
+    const res = await itemsUpdateHandler(updateReq)
+    const updated = await res.json()
+    expect(updated[0].title).toBe('New')
+  })
+})
+
+describe('DELETE /navigation-plugin/items/:id', () => {
+  test('deletes a menu item and its children', async () => {
+    // Create parent
+    const parentReq = await makeRequest(
+      '/api/navigation-plugin/items',
+      { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'Parent', type: 'url', url: '/' }) },
+      adminUser,
+    )
+    const parentDocs = await (await itemsAddHandler(parentReq)).json()
+    const parentId = parentDocs[0].id
+
+    // Create child
+    const childReq = await makeRequest(
+      '/api/navigation-plugin/items',
+      { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'Child', type: 'url', url: '/child', parent: parentId }) },
+      adminUser,
+    )
+    await itemsAddHandler(childReq)
+
+    // Delete parent
+    const deleteReq = await makeRequest(
+      `/api/navigation-plugin/items/${parentId}?handle=${navigationHandle}`,
+      { method: 'DELETE' },
+      adminUser,
+    )
+    ;(deleteReq as unknown as { routeParams: unknown }).routeParams = { id: parentId }
+    const res = await itemsDeleteHandler(deleteReq)
+    const remaining = await res.json()
+    expect(remaining).toHaveLength(0)
+  })
+})
+
+describe('POST /navigation-plugin/reorder', () => {
+  test('reorders items and updates parent/depth', async () => {
+    // Create two items
+    const r1 = await makeRequest(
+      '/api/navigation-plugin/items',
+      { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'A', type: 'url', url: '/a' }) },
+      adminUser,
+    )
+    const docs1 = await (await itemsAddHandler(r1)).json()
+    const idA = docs1[0].id
+
+    const r2 = await makeRequest(
+      '/api/navigation-plugin/items',
+      { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'B', type: 'url', url: '/b' }) },
+      adminUser,
+    )
+    const docs2 = await (await itemsAddHandler(r2)).json()
+    const idB = docs2.find((d: { title: string }) => d.title === 'B').id
+
+    const reorderReq = await makeRequest(
+      '/api/navigation-plugin/reorder',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          handle: navigationHandle,
+          updates: [
+            { id: idA, _order: 'a0', parent: idB, depth: 1 },
+          ],
+        }),
+      },
+      adminUser,
+    )
+    const res = await reorderHandler(reorderReq)
+    expect(res.status).toBe(200)
+  })
+})
+
+describe('GET /navigation-plugin/parent-options', () => {
+  test('returns menu items for the handle', async () => {
+    const r1 = await makeRequest(
+      '/api/navigation-plugin/items',
+      { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'Home', type: 'url', url: '/' }) },
+      adminUser,
+    )
+    await itemsAddHandler(r1)
+
+    const req = await makeRequest(
+      `/api/navigation-plugin/parent-options?handle=${navigationHandle}`,
+      { method: 'GET' },
+      adminUser,
+    )
+    const res = await parentOptionsHandler(req)
+    const data = await res.json()
+    expect(data).toHaveLength(1)
+    expect(data[0].title).toBe('Home')
+  })
+
+  test('excludes item by excludeId', async () => {
+    const r1 = await makeRequest(
+      '/api/navigation-plugin/items',
+      { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'Home', type: 'url', url: '/' }) },
+      adminUser,
+    )
+    const docs = await (await itemsAddHandler(r1)).json()
+    const itemId = docs[0].id
+
+    const req = await makeRequest(
+      `/api/navigation-plugin/parent-options?handle=${navigationHandle}&excludeId=${itemId}`,
+      { method: 'GET' },
+      adminUser,
+    )
+    const res = await parentOptionsHandler(req)
+    const data = await res.json()
+    expect(data).toHaveLength(0)
+  })
+})
+
+describe('Plugin collections', () => {
+  test('navigation collection is registered', () => {
+    expect(payload.collections['navigation']).toBeDefined()
+  })
+
+  test('menu_item collection is registered', () => {
+    expect(payload.collections['menu_item']).toBeDefined()
+  })
+
+  test('navigation has handle auto-generated', async () => {
+    const nav = await payload.findByID({ collection: 'navigation', id: navigationId })
+    expect(nav.handle).toBeTruthy()
+    expect(typeof nav.handle).toBe('string')
   })
 })

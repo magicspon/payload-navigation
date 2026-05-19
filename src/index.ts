@@ -1,113 +1,115 @@
-import type { CollectionSlug, Config } from 'payload'
+import type { Config, PayloadRequest, Plugin } from 'payload'
+import { APIError } from 'payload'
 
-import { customEndpointHandler } from './endpoints/customEndpointHandler.js'
+import type { NavigationPluginConfig } from './types'
 
-export type PayloadNavigationConfig = {
-  /**
-   * List of collections to add a custom field
-   */
-  collections?: Partial<Record<CollectionSlug, true>>
-  disabled?: boolean
-}
+import { createMenuItemCollection } from './collections/menu-item'
+import { createNavigationCollection } from './collections/navigation'
+import { itemsAddHandler } from './endpoints/items-add'
+import { itemsDeleteHandler } from './endpoints/items-delete'
+import { itemsGetHandler } from './endpoints/items-get'
+import { itemsUpdateHandler } from './endpoints/items-update'
+import { parentOptionsHandler } from './endpoints/parent-options'
+import { reorderHandler } from './endpoints/reorder'
 
-export const payloadNavigation =
-  (pluginOptions: PayloadNavigationConfig) =>
+export type { NavigationPluginConfig } from './types'
+export type { Item, Menu, MenuItemType, NavigationMenuItem } from './types'
+
+export const navigationPlugin =
+  (pluginOptions: NavigationPluginConfig = {}): Plugin =>
   (config: Config): Config => {
-    if (!config.collections) {
-      config.collections = []
-    }
+    const navigationCollection = createNavigationCollection(pluginOptions)
+    const menuItemCollection = createMenuItemCollection(pluginOptions)
 
-    config.collections.push({
-      slug: 'plugin-collection',
-      fields: [
-        {
-          name: 'id',
-          type: 'text',
-        },
-      ],
-    })
+    config.collections = [
+      ...(config.collections ?? []),
+      navigationCollection,
+      menuItemCollection,
+    ]
 
-    if (pluginOptions.collections) {
-      for (const collectionSlug in pluginOptions.collections) {
-        const collection = config.collections.find(
-          (collection) => collection.slug === collectionSlug,
-        )
+    if (pluginOptions.disabled) {return config}
 
-        if (collection) {
-          collection.fields.push({
-            name: 'addedByPlugin',
-            type: 'text',
-            admin: {
-              position: 'sidebar',
-            },
-          })
+    const { internalCollections = [] } = pluginOptions
+
+    if (internalCollections.length > 0) {
+      config.collections = config.collections.map((collection) => {
+        if (!internalCollections.includes(collection.slug)) {return collection}
+
+        const slug = collection.slug
+        return {
+          ...collection,
+          hooks: {
+            ...collection.hooks,
+            beforeDelete: [
+              ...(collection.hooks?.beforeDelete ?? []),
+              async ({ id, req }: { id: number | string; req: PayloadRequest }) => {
+                const result = await req.payload.find({
+                  collection: 'menu_item',
+                  depth: 0,
+                  limit: 5,
+                  req,
+                  select: { title: true },
+                  where: {
+                    and: [
+                      { 'internal.relationTo': { equals: slug } },
+                      { 'internal.value': { equals: String(id) } },
+                    ],
+                  },
+                })
+
+                if (result.totalDocs > 0) {
+                  const names = result.docs
+                    .map((d) => d.title as string)
+                    .filter(Boolean)
+                    .join(', ')
+                  throw new APIError(
+                    `Cannot delete: this page is referenced by ${result.totalDocs} menu item${result.totalDocs === 1 ? '' : 's'}${names ? ` (${names})` : ''}. Remove it from the menu before deleting.`,
+                    400,
+                  )
+                }
+              },
+            ],
+          },
         }
-      }
-    }
-
-    /**
-     * If the plugin is disabled, we still want to keep added collections/fields so the database schema is consistent which is important for migrations.
-     * If your plugin heavily modifies the database schema, you may want to remove this property.
-     */
-    if (pluginOptions.disabled) {
-      return config
-    }
-
-    if (!config.endpoints) {
-      config.endpoints = []
-    }
-
-    if (!config.admin) {
-      config.admin = {}
-    }
-
-    if (!config.admin.components) {
-      config.admin.components = {}
-    }
-
-    if (!config.admin.components.beforeDashboard) {
-      config.admin.components.beforeDashboard = []
-    }
-
-    config.admin.components.beforeDashboard.push(
-      `payload-navigation/client#BeforeDashboardClient`,
-    )
-    config.admin.components.beforeDashboard.push(
-      `payload-navigation/rsc#BeforeDashboardServer`,
-    )
-
-    config.endpoints.push({
-      handler: customEndpointHandler,
-      method: 'get',
-      path: '/my-plugin-endpoint',
-    })
-
-    const incomingOnInit = config.onInit
-
-    config.onInit = async (payload) => {
-      // Ensure we are executing any existing onInit functions before running our own.
-      if (incomingOnInit) {
-        await incomingOnInit(payload)
-      }
-
-      const { totalDocs } = await payload.count({
-        collection: 'plugin-collection',
-        where: {
-          id: {
-            equals: 'seeded-by-plugin',
-          },
-        },
       })
-
-      if (totalDocs === 0) {
-        await payload.create({
-          collection: 'plugin-collection',
-          data: {
-            id: 'seeded-by-plugin',
-          },
-        })
-      }
     }
+
+    config.typescript = {
+      ...config.typescript,
+      schema: [
+        ...(config.typescript?.schema ?? []),
+        ({ jsonSchema }) => ({
+          ...jsonSchema,
+          definitions: {
+            ...(jsonSchema.definitions as Record<string, unknown> ?? {}),
+            NavigationMenuItem: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['id', 'title', 'type', 'href', 'depth', 'parent'],
+              properties: {
+                id: { type: 'string' },
+                title: { type: 'string' },
+                type: { type: 'string' },
+                href: { type: 'string' },
+                depth: { type: 'number' },
+                parent: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+                children: { type: 'array', items: { $ref: '#/definitions/NavigationMenuItem' } },
+              },
+            },
+          },
+        }),
+      ],
+    }
+
+    config.endpoints = [
+      ...(config.endpoints ?? []),
+      { handler: itemsGetHandler, method: 'get', path: '/navigation-plugin/items' },
+      { handler: itemsAddHandler, method: 'post', path: '/navigation-plugin/items' },
+      { handler: itemsUpdateHandler, method: 'put', path: '/navigation-plugin/items/:id' },
+      { handler: itemsDeleteHandler, method: 'delete', path: '/navigation-plugin/items/:id' },
+      { handler: reorderHandler, method: 'post', path: '/navigation-plugin/reorder' },
+      { handler: parentOptionsHandler, method: 'get', path: '/navigation-plugin/parent-options' },
+    ]
 
     return config
   }
