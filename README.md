@@ -88,19 +88,19 @@ navigationPlugin({
 
 The plugin registers two collections:
 
-- **`navigation`** — A named menu (e.g. "Main Nav", "Footer"). Contains the visual builder UI and a hidden `data` field with the precomputed tree.
+- **`navigation`** — A named menu (e.g. "Main Nav", "Footer"). Contains the visual builder UI and a hidden `items` field with the precomputed tree.
 - **`menu_item`** — Individual items within a menu. Managed through the builder UI, not directly.
 
 ## The `data` field
 
-Every time a menu item is added, edited, reordered, or deleted, the navigation document's `data` field is updated with a clean JSON tree:
+Every time a menu item is added, edited, reordered, or deleted, the navigation document's `items` field is updated with a clean JSON tree:
 
 ```ts
 type NavigationMenuItem = {
   id: string
   title: string
   type: string
-  value: string      // resolved URL for all types
+  href: string      // resolved URL for all types
   depth: number
   parent: string | null
   children?: NavigationMenuItem[]
@@ -115,7 +115,7 @@ const nav = await payload.find({
   where: { slug: { equals: 'main' } },
 })
 
-const tree = nav.docs[0]?.data // NavigationMenuItem[]
+const tree = nav.docs[0]?.items // NavigationMenuItem[]
 ```
 
 ## Link types
@@ -148,13 +148,13 @@ cp dev/.env.example dev/.env
 pnpm dev
 
 # Type check
-pnpm exec tsc --noEmit
+pnpm typecheck
 
 # Lint
 pnpm lint
 
-# Integration tests
-pnpm test:int
+# Unit tests
+pnpm test:unit
 
 # E2E tests (requires dev server running)
 pnpm test:e2e
