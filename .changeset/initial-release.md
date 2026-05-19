@@ -1,5 +1,5 @@
 ---
-"@spon/payload-navigation": major
+"@spon/payload-navigation": minor
 ---
 
 Initial release.
