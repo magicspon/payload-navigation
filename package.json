@@ -1,5 +1,5 @@
 {
-  "name": "payload-navigation",
+  "name": "@spon/payload-navigation",
   "version": "1.0.0",
   "description": "A blank template to get started with Payload 3.0",
   "license": "MIT",
@@ -26,6 +26,13 @@
   "files": [
     "dist"
   ],
+  "repository": {
+	  "url": "https://github.com/magicspon/payload-navigation"
+  },
+  "author": {
+	 	"name": "Dave Stockley",
+		"email": "magicspon@gmail.com"
+  },
   "scripts": {
     "build": "pnpm copyfiles && pnpm build:types && pnpm build:swc",
     "build:swc": "swc ./src -d ./dist --config-file .swcrc --strip-leading-paths",
@@ -38,13 +45,16 @@
     "dev:payload": "cross-env PAYLOAD_CONFIG_PATH=./dev/payload.config.ts payload",
     "generate:importmap": "pnpm dev:generate-importmap",
     "generate:types": "pnpm dev:generate-types",
-    "lint": "eslint",
+    "lint": "eslint ./src",
     "lint:fix": "eslint ./src --fix",
-    "test": "pnpm test:int && pnpm test:e2e",
+    "release": "changeset publish",
+    "test": "pnpm test:unit && pnpm test:e2e",
     "test:e2e": "playwright test",
-    "test:int": "vitest"
+    "test:unit": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+	  "@changesets/cli": "^2.31.0",
     "@eslint/eslintrc": "^3.2.0",
     "@payloadcms/db-mongodb": "3.84.1",
     "@payloadcms/db-postgres": "3.84.1",
@@ -84,7 +94,7 @@
   },
   "engines": {
     "node": "^18.20.2 || >=20.9.0",
-    "pnpm": "^9 || ^10"
+    "pnpm": "^9 || ^10 || ^11"
   },
   "publishConfig": {
     "exports": {
@@ -115,5 +125,8 @@
     ]
   },
   "registry": "https://registry.npmjs.org/",
-  "dependencies": {}
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/utilities": "^3.2.2"
+  }
 }

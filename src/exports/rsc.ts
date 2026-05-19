@@ -1,1 +1,2 @@
-export { BeforeDashboardServer } from '../components/BeforeDashboardServer.js'
+// No RSC components for this plugin — all admin UI is client-only
+export {}

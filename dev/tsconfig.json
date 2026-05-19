@@ -14,18 +14,20 @@
     ".next/types/**/*.ts"
   ],
   "compilerOptions": {
+	  "module": "ESNext",
+	  "moduleResolution": "bundler",
     "baseUrl": "./",
     "paths": {
       "@payload-config": [
         "./payload.config.ts"
       ],
-      "payload-navigation": [
+      "@spon/payload-navigation": [
         "../src/index.ts"
       ],
-      "payload-navigation/client": [
+      "@spon/payload-navigation/client": [
         "../src/exports/client.ts"
       ],
-      "payload-navigation/rsc": [
+      "@spon/payload-navigation/rsc": [
         "../src/exports/rsc.ts"
       ]
     },
