@@ -1,6 +1,6 @@
 {
   "name": "@spon/payload-navigation",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A blank template to get started with Payload 3.0",
   "license": "MIT",
   "type": "module",
@@ -27,11 +27,11 @@
     "dist"
   ],
   "repository": {
-	  "url": "https://github.com/magicspon/payload-navigation"
+    "url": "https://github.com/magicspon/payload-navigation"
   },
   "author": {
-	 	"name": "Dave Stockley",
-		"email": "magicspon@gmail.com"
+    "name": "Dave Stockley",
+    "email": "magicspon@gmail.com"
   },
   "scripts": {
     "build": "pnpm copyfiles && pnpm build:types && pnpm build:swc",
@@ -54,7 +54,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-	  "@changesets/cli": "^2.31.0",
+    "@changesets/cli": "^2.31.0",
     "@eslint/eslintrc": "^3.2.0",
     "@payloadcms/db-mongodb": "3.84.1",
     "@payloadcms/db-postgres": "3.84.1",
