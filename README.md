@@ -91,7 +91,7 @@ The plugin registers two collections:
 - **`navigation`** — A named menu (e.g. "Main Nav", "Footer"). Contains the visual builder UI and a hidden `items` field with the precomputed tree.
 - **`menu_item`** — Individual items within a menu. Managed through the builder UI, not directly.
 
-## The `data` field
+## The `items` field
 
 Every time a menu item is added, edited, reordered, or deleted, the navigation document's `items` field is updated with a clean JSON tree:
 
