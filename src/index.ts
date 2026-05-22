@@ -8,6 +8,7 @@ import { createNavigationCollection } from './collections/navigation'
 import { itemsAddHandler } from './endpoints/items-add'
 import { itemsDeleteHandler } from './endpoints/items-delete'
 import { itemsGetHandler } from './endpoints/items-get'
+import { itemsPatchCollapsedHandler } from './endpoints/items-patch-collapsed'
 import { itemsUpdateHandler } from './endpoints/items-update'
 import { parentOptionsHandler } from './endpoints/parent-options'
 import { reorderHandler } from './endpoints/reorder'
@@ -85,13 +86,14 @@ export const navigationPlugin =
             NavigationMenuItem: {
               type: 'object',
               additionalProperties: false,
-              required: ['id', 'title', 'type', 'href', 'depth', 'parent'],
+              required: ['id', 'title', 'type', 'href', 'depth', 'parent', 'collapsed'],
               properties: {
                 id: { type: 'string' },
                 title: { type: 'string' },
                 type: { type: 'string' },
                 href: { type: 'string' },
                 depth: { type: 'number' },
+                collapsed: { type: 'boolean' },
                 parent: { oneOf: [{ type: 'string' }, { type: 'null' }] },
                 children: { type: 'array', items: { $ref: '#/definitions/NavigationMenuItem' } },
               },
@@ -106,6 +108,7 @@ export const navigationPlugin =
       { handler: itemsGetHandler, method: 'get', path: '/navigation-plugin/items' },
       { handler: itemsAddHandler, method: 'post', path: '/navigation-plugin/items' },
       { handler: itemsUpdateHandler, method: 'put', path: '/navigation-plugin/items/:id' },
+      { handler: itemsPatchCollapsedHandler, method: 'patch', path: '/navigation-plugin/items/:id' },
       { handler: itemsDeleteHandler, method: 'delete', path: '/navigation-plugin/items/:id' },
       { handler: reorderHandler, method: 'post', path: '/navigation-plugin/reorder' },
       { handler: parentOptionsHandler, method: 'get', path: '/navigation-plugin/parent-options' },

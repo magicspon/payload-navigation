@@ -1,4 +1,4 @@
-import type { BasePayload, CollectionConfig } from 'payload'
+import type { BasePayload, CollectionConfig, CollectionSlug } from 'payload'
 
 export type MenuItemType = 'custom' | 'internal' | 'passive' | 'url'
 
@@ -19,7 +19,7 @@ export type NavigationAccess = {
 }
 
 export type ResolveInternalUrl = (args: {
-  collection: string
+  collection: CollectionSlug
   id: string
   payload: BasePayload
 }) => Promise<string>
@@ -35,6 +35,7 @@ export type NavigationPluginConfig = {
 export type Item = {
   [key: string]: unknown
   _order?: null | string
+  collapsed?: boolean | null
   custom?: null | string
   depth?: null | number
   handle: string
@@ -57,6 +58,7 @@ export type Menu = {
 
 export type NavigationMenuItem = {
   children?: NavigationMenuItem[]
+  collapsed?: boolean
   depth: number
   href: string
   id: string

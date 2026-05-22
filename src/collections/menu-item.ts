@@ -1,4 +1,4 @@
-import type { BasePayload, CollectionConfig } from 'payload'
+import type { BasePayload, CollectionConfig, CollectionSlug } from 'payload'
 
 import type { NavigationPluginConfig, ResolveInternalUrl } from '../types'
 
@@ -23,7 +23,7 @@ export const createMenuItemCollection = (
     admin: {
       defaultColumns: ['title', 'type', 'value'],
       group: 'Navigation',
-      hidden: true,
+      hidden: false,
       useAsTitle: 'title',
     },
     fields: [
@@ -68,7 +68,7 @@ export const createMenuItemCollection = (
                   siblingData?.type === 'internal',
               },
               label: 'Internal Page',
-              relationTo: internalCollections,
+              relationTo: internalCollections as CollectionSlug[],
             },
           ]
         : []),
@@ -88,6 +88,12 @@ export const createMenuItemCollection = (
           condition: (_data, siblingData) => siblingData?.type === 'passive',
         },
         label: 'Passive',
+      },
+      {
+        name: 'collapsed',
+        type: 'checkbox',
+        admin: { hidden: true },
+        defaultValue: false,
       },
       {
         name: 'depth',
@@ -120,10 +126,17 @@ export const createMenuItemCollection = (
                   : internalCollections[0]
               const internalId =
                 typeof internal === 'object' && internal.value ? internal.value : internal
-              const id = typeof internalId === 'string' ? internalId : internalId?.id
+              const id =
+                typeof internalId === 'string' || typeof internalId === 'number'
+                  ? String(internalId)
+                  : internalId?.id
 
               if (id && relationTo) {
-                data.value = await resolveInternalUrl({ id, collection: relationTo, payload: req.payload })
+                data.value = await resolveInternalUrl({
+                  id,
+                  collection: relationTo,
+                  payload: req.payload,
+                })
               }
             } catch {
               data.value = ''
@@ -155,7 +168,11 @@ export const createMenuItemCollection = (
   }
 }
 
-async function resolveDepth(payload: BasePayload, parentId: string, maxDepth: number): Promise<number> {
+async function resolveDepth(
+  payload: BasePayload,
+  parentId: string,
+  maxDepth: number,
+): Promise<number> {
   let current = parentId
   let depth = 0
   while (current && depth <= maxDepth) {
@@ -165,10 +182,14 @@ async function resolveDepth(payload: BasePayload, parentId: string, maxDepth: nu
       depth: 0,
       select: { depth: true, parent: true },
     })
-    if (!parent) {break}
+    if (!parent) {
+      break
+    }
     depth = (parent.depth as number) ?? 0
-    current = (parent.parent as string) ?? ''
-    if (!current) {break}
+    current = (parent.parent as unknown as string) ?? ''
+    if (!current) {
+      break
+    }
   }
   return depth
 }

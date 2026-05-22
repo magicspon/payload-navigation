@@ -7,25 +7,31 @@ function getParentId(item: Item): null | string {
   return null
 }
 
-function buildChildren(parentId: null | string, items: Item[]): Menu[] {
+function buildChildren(parentId: null | string, items: Item[], level: number): Menu[] {
   return items
     .filter((item) => getParentId(item) === parentId)
-    .map((item) => ({ ...item, id: String(item.id), children: buildChildren(String(item.id), items) }))
+    .map((item) => ({
+      ...item,
+      id: String(item.id),
+      depth: level,
+      children: buildChildren(String(item.id), items, level + 1),
+    }))
 }
 
 export function createTree(items: Item[]): Menu[] {
-  return buildChildren(null, items)
+  return buildChildren(null, items, 0)
 }
 
-function buildCleanChildren(parentId: null | string, items: Item[]): NavigationMenuItem[] {
+function buildCleanChildren(parentId: null | string, items: Item[], level: number): NavigationMenuItem[] {
   return items
     .filter((item) => getParentId(item) === parentId)
     .map((item) => {
-      const children = buildCleanChildren(item.id, items)
+      const children = buildCleanChildren(item.id, items, level + 1)
       const clean: NavigationMenuItem = {
         id: item.id,
         type: (item.type as string) ?? '',
-        depth: item.depth ?? 0,
+        collapsed: item.collapsed ?? false,
+        depth: level,
         parent: getParentId(item),
         title: item.title,
         href: item.value ?? '',
@@ -36,5 +42,13 @@ function buildCleanChildren(parentId: null | string, items: Item[]): NavigationM
 }
 
 export function createCleanTree(items: Item[]): NavigationMenuItem[] {
-  return buildCleanChildren(null, items)
+  return buildCleanChildren(null, items, 0)
+}
+
+export function normalizeDepths(nodes: Menu[], level = 0): Menu[] {
+  return nodes.map((node) => ({
+    ...node,
+    depth: level,
+    children: node.children?.length ? normalizeDepths(node.children, level + 1) : node.children,
+  }))
 }

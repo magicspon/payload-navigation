@@ -48,8 +48,8 @@ export const createNavigationCollection = (
         admin: {
           components: {
             Field: {
-              clientProps: { internalCollections, maxDepth },
-              path: '@spon/payload-navigation/client#MenuTree',
+              serverProps: { internalCollections, maxDepth },
+              path: '@spon/payload-navigation/rsc#MenuTreeServer',
             },
           },
         },
@@ -57,7 +57,7 @@ export const createNavigationCollection = (
       {
         name: 'items',
         type: 'json',
-        admin: { hidden: true, readOnly: true },
+        admin: { hidden: false, readOnly: true },
         typescriptSchema: [() => ({ type: 'array', items: { $ref: '#/definitions/NavigationMenuItem' } })],
       },
     ],

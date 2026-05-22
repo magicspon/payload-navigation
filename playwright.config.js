@@ -39,8 +39,9 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'pnpm dev',
-    reuseExistingServer: true,
+    command: 'pnpm dev:start',
+    reuseExistingServer: !process.env.CI,
     url: 'http://localhost:3000/admin',
+    timeout: 120000,
   },
 })
