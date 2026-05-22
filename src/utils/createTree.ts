@@ -3,14 +3,14 @@ import type { NavigationMenuItem, Item, Menu } from '../types'
 function getParentId(item: Item): null | string {
   if (item.parent === null || item.parent === undefined) {return null}
   if (typeof item.parent === 'string') {return item.parent}
-  if (typeof item.parent === 'object' && 'id' in item.parent) {return item.parent.id}
+  if (typeof item.parent === 'object' && 'id' in item.parent) {return String(item.parent.id)}
   return null
 }
 
 function buildChildren(parentId: null | string, items: Item[]): Menu[] {
   return items
     .filter((item) => getParentId(item) === parentId)
-    .map((item) => ({ ...item, children: buildChildren(item.id, items) }))
+    .map((item) => ({ ...item, id: String(item.id), children: buildChildren(String(item.id), items) }))
 }
 
 export function createTree(items: Item[]): Menu[] {
