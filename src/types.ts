@@ -27,7 +27,7 @@ export type ResolveInternalUrl = (args: {
 export type NavigationPluginConfig = {
   access?: NavigationAccess
   disabled?: boolean
-  internalCollections?: string[]
+  internalCollections?: CollectionSlug[]
   maxDepth?: number
   resolveInternalUrl?: ResolveInternalUrl
 }
