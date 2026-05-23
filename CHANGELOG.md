@@ -1,5 +1,11 @@
 # @spon/payload-navigation
 
+## 0.3.1
+
+### Patch Changes
+
+- 78e94b3: Hide the internal `menuItem` collection from the Payload admin UI.
+
 ## 0.3.0
 
 ### Minor Changes
