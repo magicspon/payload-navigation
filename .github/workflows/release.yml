@@ -3,8 +3,7 @@ name: Release
 on:
   push:
     branches: [main]
-    paths:
-      - 'src/**'
+  workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
