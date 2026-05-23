@@ -58,6 +58,17 @@ export const tree = {
     }
   },
 
+  findParent<T extends TreeLike<T>>(data: T[], itemId: string, parent: T | null = null): T | null | undefined {
+    for (const item of data) {
+      if (item.id === itemId) {return parent}
+      if (tree.hasChildren(item)) {
+        const result = tree.findParent((item.children || []) as T[], itemId, item)
+        if (result !== undefined) {return result}
+      }
+    }
+    return undefined
+  },
+
   hasChildren<T extends TreeLike<T>>(item: T): boolean {
     return (item.children?.length ?? 0) > 0
   },

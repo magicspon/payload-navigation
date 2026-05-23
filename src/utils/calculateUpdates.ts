@@ -20,9 +20,16 @@ type UpdateItem = {
 export function calculateUpdates(newTree: Menu[], originalData: OriginalItem[]): UpdateItem[] {
   const originalMap = new Map(
     originalData.map((item) => {
+      const rawParent = item.parent
       const parentId =
-        typeof item.parent === 'string' ? item.parent : (item.parent?.id ?? null)
-      return [item.id, { _order: item._order ?? '', depth: item.depth ?? 0, parent: parentId }]
+        rawParent === null || rawParent === undefined
+          ? null
+          : typeof rawParent === 'string'
+            ? rawParent
+            : typeof rawParent === 'object' && 'id' in rawParent
+              ? String((rawParent as { id: unknown }).id)
+              : null
+      return [String(item.id), { _order: item._order ?? '', depth: item.depth ?? 0, parent: parentId }]
     }),
   )
 

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url'
 
 import { testEmailAdapter } from './helpers/testEmailAdapter'
 import { seed } from './seed'
+import { Page } from 'payload-types'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -59,6 +60,16 @@ export default buildConfig({
     navigationPlugin({
       internalCollections: ['pages', 'posts'],
       maxDepth: 3,
+      resolveInternalUrl: async ({ id, collection, payload }) => {
+        const doc = await payload.findByID({ collection, id, depth: 0 })
+
+        if (collection === 'pages') {
+          const docNode = doc as Page
+          return docNode?.slug ? `/${docNode.slug}` : '#'
+        }
+
+        return 'TBD'
+      },
     }),
   ],
   secret: process.env.PAYLOAD_SECRET || 'test-secret_key',

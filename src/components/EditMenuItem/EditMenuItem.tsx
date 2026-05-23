@@ -1,8 +1,8 @@
 'use client'
-import { EditIcon, toast, useConfig, XIcon, Button } from '@payloadcms/ui'
+import { EditIcon, toast, useConfig, useField, XIcon, Button } from '@payloadcms/ui'
 import * as React from 'react'
 
-import type { FormData, Item, MenuItemType } from '../../types'
+import type { FormData, Item, Menu, MenuItemType } from '../../types'
 
 import { CustomField } from '../fields/CustomField'
 import { InternalField } from '../fields/InternalField'
@@ -15,7 +15,7 @@ import { UrlField } from '../fields/UrlField'
 type Props = {
   handle: string
   internalCollections: string[]
-  onUpdated: (docs: unknown[]) => void
+  onUpdated: (tree: Menu[], docs: Item[]) => void
 } & Item
 
 const overlayStyle: React.CSSProperties = {
@@ -26,7 +26,7 @@ const overlayStyle: React.CSSProperties = {
 }
 
 const drawerStyle: React.CSSProperties = {
-  background: 'var(--color-base-900)',
+  background: 'var(--theme-bg)',
   display: 'flex',
   flexDirection: 'column',
   gap: '1rem',
@@ -45,21 +45,36 @@ const btnStyle: React.CSSProperties = {
   alignItems: 'center',
   background: 'transparent',
   border: 0,
-  color: 'var(--color-base-400)',
+  color: 'var(--theme-elevation-700)',
   cursor: 'pointer',
   display: 'flex',
   padding: '0.25rem',
 }
 
-export function EditMenuItem({ id, type, custom, handle, internal, internalCollections, onUpdated, parent, passive, title, url }: Props) {
+export function EditMenuItem({
+  id,
+  type,
+  custom,
+  handle,
+  internal,
+  internalCollections,
+  onUpdated,
+  parent,
+  passive,
+  title,
+  url,
+}: Props) {
   const { config } = useConfig()
+  const { value: items } = useField<Menu[]>({ path: 'items' })
   const [open, setOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
 
-  const parentId = typeof parent === 'object' && parent !== null ? (parent as { id: string }).id : (parent)
-  const internalId = typeof internal?.value === 'object' && internal?.value !== null
-    ? (internal.value as { id: string }).id
-    : (internal?.value as string | undefined)
+  const parentId =
+    typeof parent === 'object' && parent !== null ? (parent as { id: string }).id : parent
+  const internalId =
+    typeof internal?.value === 'object' && internal?.value !== null
+      ? (internal.value as { id: string }).id
+      : (internal?.value as string | undefined)
 
   const [formData, setFormData] = React.useState<FormData>({
     type: (type as MenuItemType) ?? 'url',
@@ -75,7 +90,9 @@ export function EditMenuItem({ id, type, custom, handle, internal, internalColle
   const apiBase = `${config.serverURL}${config.routes.api}/navigation-plugin`
 
   const handleSave = async () => {
-    if (!formData.title) {return}
+    if (!formData.title) {
+      return
+    }
     setLoading(true)
     try {
       const body: Record<string, unknown> = {
@@ -84,10 +101,19 @@ export function EditMenuItem({ id, type, custom, handle, internal, internalColle
         parent: formData.parent ?? null,
         title: formData.title,
       }
-      if (formData.type === 'url') {body.url = formData.url}
-      if (formData.type === 'internal') { body.internal = formData.internal; body.relationTo = formData.relationTo }
-      if (formData.type === 'custom') {body.custom = formData.custom}
-      if (formData.type === 'passive') {body.passive = formData.passive}
+      if (formData.type === 'url') {
+        body.url = formData.url
+      }
+      if (formData.type === 'internal') {
+        body.internal = formData.internal
+        body.relationTo = formData.relationTo
+      }
+      if (formData.type === 'custom') {
+        body.custom = formData.custom
+      }
+      if (formData.type === 'passive') {
+        body.passive = formData.passive
+      }
 
       const res = await fetch(`${apiBase}/items/${id}`, {
         body: JSON.stringify(body),
@@ -95,9 +121,11 @@ export function EditMenuItem({ id, type, custom, handle, internal, internalColle
         headers: { 'Content-Type': 'application/json' },
         method: 'PUT',
       })
-      if (!res.ok) {throw new Error('Failed to update')}
-      const data = await res.json()
-      onUpdated(data)
+      if (!res.ok) {
+        throw new Error('Failed to update')
+      }
+      const { tree, docs } = await res.json()
+      onUpdated(tree, docs)
       toast.success('Menu item updated')
       setOpen(false)
     } catch {
@@ -116,15 +144,18 @@ export function EditMenuItem({ id, type, custom, handle, internal, internalColle
       {open && (
         <>
           <div onClick={() => setOpen(false)} role="presentation" style={overlayStyle} />
-          <div style={drawerStyle}>
+          <div data-testid="edit-drawer" style={drawerStyle}>
             <div style={{ alignItems: 'center', display: 'flex', justifyContent: 'space-between' }}>
-              <h3 style={{ color: 'var(--color-base-0)', margin: 0 }}>Edit Menu Item</h3>
+              <h3 style={{ color: 'var(--theme-elevation-0)', margin: 0 }}>Edit Menu Item</h3>
               <button onClick={() => setOpen(false)} style={btnStyle} type="button">
                 <XIcon />
               </button>
             </div>
 
-            <TitleInput onChange={(v) => setFormData({ ...formData, title: v })} value={formData.title} />
+            <TitleInput
+              onChange={(v) => setFormData({ ...formData, title: v })}
+              value={formData.title}
+            />
             <MenuType
               internalCollections={internalCollections}
               onChange={(v) => setFormData({ ...formData, type: v })}
@@ -132,34 +163,49 @@ export function EditMenuItem({ id, type, custom, handle, internal, internalColle
             />
 
             {formData.type === 'url' && (
-              <UrlField onChange={(v) => setFormData({ ...formData, url: v })} value={formData.url} />
+              <UrlField
+                onChange={(v) => setFormData({ ...formData, url: v })}
+                value={formData.url}
+              />
             )}
             {formData.type === 'internal' && internalCollections.length > 0 && (
               <InternalField
                 internalCollections={internalCollections}
-                onChange={(v) => setFormData({ ...formData, internal: v?.value ?? '', relationTo: v?.relationTo ?? '' })}
-                value={formData.internal ? { relationTo: formData.relationTo ?? '', value: formData.internal } : null}
+                onChange={(v) =>
+                  setFormData({
+                    ...formData,
+                    internal: v?.value ?? '',
+                    relationTo: v?.relationTo ?? '',
+                  })
+                }
+                value={
+                  formData.internal
+                    ? { relationTo: formData.relationTo ?? '', value: formData.internal }
+                    : null
+                }
               />
             )}
             {formData.type === 'custom' && (
-              <CustomField onChange={(v) => setFormData({ ...formData, custom: v })} value={formData.custom} />
+              <CustomField
+                onChange={(v) => setFormData({ ...formData, custom: v })}
+                value={formData.custom}
+              />
             )}
             {formData.type === 'passive' && (
-              <PassiveField onChange={(v) => setFormData({ ...formData, passive: v })} value={formData.passive} />
+              <PassiveField
+                onChange={(v) => setFormData({ ...formData, passive: v })}
+                value={formData.passive}
+              />
             )}
 
             <ParentField
               excludeId={id}
-              navigationHandle={handle}
+              items={items ?? []}
               onChange={(v) => setFormData({ ...formData, parent: v })}
               value={formData.parent}
             />
 
-            <Button
-              disabled={loading || !formData.title}
-              onClick={handleSave}
-              type="button"
-            >
+            <Button disabled={loading || !formData.title} onClick={handleSave} type="button">
               {loading ? 'Saving…' : 'Save'}
             </Button>
           </div>

@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest'
 import { itemsAddHandler } from '../src/endpoints/items-add.js'
 import { itemsDeleteHandler } from '../src/endpoints/items-delete.js'
 import { itemsGetHandler } from '../src/endpoints/items-get.js'
+import { itemsPatchCollapsedHandler } from '../src/endpoints/items-patch-collapsed.js'
 import { itemsUpdateHandler } from '../src/endpoints/items-update.js'
 import { parentOptionsHandler } from '../src/endpoints/parent-options.js'
 import { reorderHandler } from '../src/endpoints/reorder.js'
@@ -90,10 +91,12 @@ describe('POST /navigation-plugin/items', () => {
     )
     const res = await itemsAddHandler(req)
     expect(res.status).toBe(200)
-    const docs = await res.json()
+    const { tree, docs } = await res.json()
     expect(docs).toHaveLength(1)
     expect(docs[0].title).toBe('Home')
     expect(docs[0].type).toBe('url')
+    expect(tree).toHaveLength(1)
+    expect(tree[0].title).toBe('Home')
   })
 
   test('creates a custom menu item', async () => {
@@ -106,7 +109,7 @@ describe('POST /navigation-plugin/items', () => {
       adminUser,
     )
     const res = await itemsAddHandler(req)
-    const docs = await res.json()
+    const { docs } = await res.json()
     expect(docs[0].type).toBe('custom')
   })
 
@@ -120,7 +123,7 @@ describe('POST /navigation-plugin/items', () => {
       adminUser,
     )
     const res = await itemsAddHandler(req)
-    const docs = await res.json()
+    const { docs } = await res.json()
     expect(docs[0].type).toBe('passive')
   })
 
@@ -140,22 +143,6 @@ describe('POST /navigation-plugin/items', () => {
     )
     await expect(itemsAddHandler(req)).rejects.toMatchObject({ status: 400 })
   })
-
-  test('updates navigation data JSON field after add', async () => {
-    const req = await makeRequest(
-      '/api/navigation-plugin/items',
-      {
-        method: 'POST',
-        body: JSON.stringify({ handle: navigationHandle, title: 'Home', type: 'url', url: '/' }),
-      },
-      adminUser,
-    )
-    await itemsAddHandler(req)
-
-    const nav = await payload.findByID({ collection: 'navigation', id: navigationId })
-    expect(nav.items).toBeDefined()
-    expect((nav.items as unknown[]).length).toBeGreaterThan(0)
-  })
 })
 
 describe('PUT /navigation-plugin/items/:id', () => {
@@ -166,7 +153,7 @@ describe('PUT /navigation-plugin/items/:id', () => {
       { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'Old', type: 'url', url: 'https://old.com' }) },
       adminUser,
     )
-    const docs = await (await itemsAddHandler(createReq)).json()
+    const { docs } = await (await itemsAddHandler(createReq)).json()
     const itemId = docs[0].id
 
     // Update
@@ -177,8 +164,9 @@ describe('PUT /navigation-plugin/items/:id', () => {
     )
     ;(updateReq as unknown as { routeParams: unknown }).routeParams = { id: itemId }
     const res = await itemsUpdateHandler(updateReq)
-    const updated = await res.json()
-    expect(updated[0].title).toBe('New')
+    const { tree, docs: updatedDocs } = await res.json()
+    expect(updatedDocs[0].title).toBe('New')
+    expect(tree[0].title).toBe('New')
   })
 })
 
@@ -190,7 +178,7 @@ describe('DELETE /navigation-plugin/items/:id', () => {
       { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'Parent', type: 'url', url: '/' }) },
       adminUser,
     )
-    const parentDocs = await (await itemsAddHandler(parentReq)).json()
+    const { docs: parentDocs } = await (await itemsAddHandler(parentReq)).json()
     const parentId = parentDocs[0].id
 
     // Create child
@@ -209,8 +197,9 @@ describe('DELETE /navigation-plugin/items/:id', () => {
     )
     ;(deleteReq as unknown as { routeParams: unknown }).routeParams = { id: parentId }
     const res = await itemsDeleteHandler(deleteReq)
-    const remaining = await res.json()
+    const { tree, docs: remaining } = await res.json()
     expect(remaining).toHaveLength(0)
+    expect(tree).toHaveLength(0)
   })
 })
 
@@ -222,7 +211,7 @@ describe('POST /navigation-plugin/reorder', () => {
       { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'A', type: 'url', url: '/a' }) },
       adminUser,
     )
-    const docs1 = await (await itemsAddHandler(r1)).json()
+    const { docs: docs1 } = await (await itemsAddHandler(r1)).json()
     const idA = docs1[0].id
 
     const r2 = await makeRequest(
@@ -230,7 +219,7 @@ describe('POST /navigation-plugin/reorder', () => {
       { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'B', type: 'url', url: '/b' }) },
       adminUser,
     )
-    const docs2 = await (await itemsAddHandler(r2)).json()
+    const { docs: docs2 } = await (await itemsAddHandler(r2)).json()
     const idB = docs2.find((d: { title: string }) => d.title === 'B').id
 
     const reorderReq = await makeRequest(
@@ -248,6 +237,9 @@ describe('POST /navigation-plugin/reorder', () => {
     )
     const res = await reorderHandler(reorderReq)
     expect(res.status).toBe(200)
+    const { tree, docs } = await res.json()
+    expect(tree).toBeDefined()
+    expect(docs).toBeDefined()
   })
 })
 
@@ -277,7 +269,7 @@ describe('GET /navigation-plugin/parent-options', () => {
       { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'Home', type: 'url', url: '/' }) },
       adminUser,
     )
-    const docs = await (await itemsAddHandler(r1)).json()
+    const { docs } = await (await itemsAddHandler(r1)).json()
     const itemId = docs[0].id
 
     const req = await makeRequest(
@@ -288,6 +280,50 @@ describe('GET /navigation-plugin/parent-options', () => {
     const res = await parentOptionsHandler(req)
     const data = await res.json()
     expect(data).toHaveLength(0)
+  })
+})
+
+describe('PATCH /navigation-plugin/items/:id (collapsed)', () => {
+  test('toggles collapsed and returns updated tree', async () => {
+    const createReq = await makeRequest(
+      '/api/navigation-plugin/items',
+      { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'Home', type: 'url', url: '/' }) },
+      adminUser,
+    )
+    const { docs } = await (await itemsAddHandler(createReq)).json()
+    const itemId = docs[0].id
+
+    const patchReq = await makeRequest(
+      `/api/navigation-plugin/items/${itemId}`,
+      { method: 'PATCH', body: JSON.stringify({ collapsed: true, handle: navigationHandle }) },
+      adminUser,
+    )
+    ;(patchReq as unknown as { routeParams: unknown }).routeParams = { id: itemId }
+    const res = await itemsPatchCollapsedHandler(patchReq)
+    expect(res.status).toBe(200)
+
+    const { tree, docs: updatedDocs } = await res.json()
+    expect(tree).toBeDefined()
+    const found = updatedDocs.find((d: { id: unknown }) => String(d.id) === String(itemId))
+    expect(found?.collapsed).toBe(true)
+  })
+
+  test('returns 400 when collapsed is not a boolean', async () => {
+    const createReq = await makeRequest(
+      '/api/navigation-plugin/items',
+      { method: 'POST', body: JSON.stringify({ handle: navigationHandle, title: 'X', type: 'url', url: '/x' }) },
+      adminUser,
+    )
+    const { docs } = await (await itemsAddHandler(createReq)).json()
+    const itemId = docs[0].id
+
+    const patchReq = await makeRequest(
+      `/api/navigation-plugin/items/${itemId}`,
+      { method: 'PATCH', body: JSON.stringify({ collapsed: 'yes', handle: navigationHandle }) },
+      adminUser,
+    )
+    ;(patchReq as unknown as { routeParams: unknown }).routeParams = { id: itemId }
+    await expect(itemsPatchCollapsedHandler(patchReq)).rejects.toMatchObject({ status: 400 })
   })
 })
 

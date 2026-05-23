@@ -48,7 +48,7 @@ describe('createTree', () => {
 describe('createCleanTree', () => {
   test('builds clean tree with only serializable fields', () => {
     const tree = createCleanTree(items)
-    expect(tree[0]).toEqual({ id: '1', type: 'url', depth: 0, parent: null, title: 'Home', href: '/' })
+    expect(tree[0]).toEqual({ id: '1', type: 'url', collapsed: false, depth: 0, parent: null, title: 'Home', href: '/' })
   })
 
   test('attaches children only when non-empty', () => {

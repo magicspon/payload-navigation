@@ -2,17 +2,19 @@
 import { toast, useConfig, XIcon } from '@payloadcms/ui'
 import * as React from 'react'
 
+import type { Item, Menu } from '../../types'
+
 type Props = {
   handle: string
   id: string
-  onDeleted: (docs: unknown[]) => void
+  onDeleted: (tree: Menu[], docs: Item[]) => void
 }
 
 const btnStyle: React.CSSProperties = {
   alignItems: 'center',
   background: 'transparent',
   border: 0,
-  color: 'var(--color-base-400)',
+  color: 'var(--theme-elevation-700)',
   cursor: 'pointer',
   display: 'flex',
   padding: '0.25rem',
@@ -32,11 +34,12 @@ export function DeleteMenuItem({ id, handle, onDeleted }: Props) {
         credentials: 'include',
         method: 'DELETE',
       })
-      if (!res.ok) {throw new Error('Failed to delete')}
-      const data = await res.json()
-      onDeleted(data)
+      if (!res.ok) {
+        throw new Error('Failed to delete')
+      }
+      const { tree, docs } = await res.json()
+      onDeleted(tree, docs)
       toast.success('Item deleted')
-      window.dispatchEvent(new CustomEvent('nav:items-changed'))
     } catch {
       toast.error('Failed to delete item')
     } finally {
@@ -68,12 +71,7 @@ export function DeleteMenuItem({ id, handle, onDeleted }: Props) {
   }
 
   return (
-    <button
-      onClick={() => setConfirming(true)}
-      style={btnStyle}
-      title="Delete item"
-      type="button"
-    >
+    <button onClick={() => setConfirming(true)} style={btnStyle} title="Delete item" type="button">
       <XIcon />
     </button>
   )
