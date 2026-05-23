@@ -74,16 +74,6 @@ test.describe('Navigation admin UI', () => {
     const testPage = await createPage(request, token, { title: 'Test About', slug: 'test-about' })
     testPageId = testPage.doc?.id ?? testPage.id
 
-    await page.goto(`${BASE}/admin/login`)
-    // Wait for the login form to appear (may redirect to dashboard if already logged in)
-    const emailField = page.locator('#field-email')
-    const isLoginPage = await emailField.isVisible({ timeout: 3000 }).catch(() => false)
-    if (isLoginPage) {
-      await page.fill('#field-email', CREDENTIALS.email)
-      await page.fill('#field-password', CREDENTIALS.password)
-      await page.click('.form-submit button')
-      await page.waitForURL(`${BASE}/admin`)
-    }
   })
 
   test.afterEach(async ({ request }) => {
