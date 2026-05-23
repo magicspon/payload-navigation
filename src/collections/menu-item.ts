@@ -1,4 +1,4 @@
-import type { BasePayload, CollectionConfig, CollectionSlug } from 'payload'
+import type { BasePayload, CollectionConfig } from 'payload'
 
 import type { NavigationPluginConfig, ResolveInternalUrl } from '../types'
 
@@ -68,7 +68,7 @@ export const createMenuItemCollection = (
                   siblingData?.type === 'internal',
               },
               label: 'Internal Page',
-              relationTo: internalCollections as CollectionSlug[],
+              relationTo: internalCollections,
             },
           ]
         : []),
@@ -186,7 +186,7 @@ async function resolveDepth(
       break
     }
     depth = (parent.depth as number) ?? 0
-    current = (parent.parent as unknown as string) ?? ''
+    current = (parent.parent as string) ?? ''
     if (!current) {
       break
     }

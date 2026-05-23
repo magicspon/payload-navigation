@@ -2,7 +2,7 @@
 
 import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import { monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
-import { useConfig, useField } from '@payloadcms/ui'
+import { useField } from '@payloadcms/ui'
 import * as React from 'react'
 
 import type { Item, Menu } from '../../types'
@@ -138,7 +138,7 @@ export function MenuTreeClient({ initialDocs, internalCollections = [], navigati
   }, [handleDrop, handleUnnest])
 
   const handleItemMutated = React.useCallback(
-    (newTree: Menu[], newDocs: Item[]) => {
+    (newTree: Menu[]) => {
       setJsonData(newTree)
     },
     [setJsonData],

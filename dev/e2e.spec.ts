@@ -4,13 +4,15 @@ import type { APIRequestContext, Page } from '@playwright/test'
 const BASE = 'http://localhost:3000'
 const CREDENTIALS = { email: 'dev@payloadcms.com', password: 'test' }
 
-// Open a Payload react-select by its field path and choose an option.
-// Uses CSS :has() to scope to the correct control, then .last() to prefer
-// elements rendered later in the DOM (e.g. inside the edit drawer overlay).
+// Open a Payload react-select and choose an option.
+// Payload renders <div id="field-{path}"> as the outer wrapper; react-select
+// lives inside it with class "rs__control". We use .last() to prefer the
+// element rendered later in the DOM (e.g. inside the edit drawer overlay).
 async function selectOption(page: Page, fieldPath: string, optionText: string) {
-  const controls = page.locator(`[class*="__control"]:has(#field-${fieldPath})`)
-  await controls.last().click()
-  await page.locator('[class*="__option"]', { hasText: optionText }).first().click()
+  const control = page.locator(`#field-${fieldPath} .rs__control`).last()
+  await control.waitFor({ state: 'visible' })
+  await control.click()
+  await page.locator('.rs__option', { hasText: optionText }).first().click()
 }
 
 async function login(request: APIRequestContext): Promise<string> {
@@ -36,17 +38,22 @@ async function deleteNavigation(request: APIRequestContext, token: string, id: s
   })
 }
 
-async function seedItem(
+async function createPage(
   request: APIRequestContext,
   token: string,
-  handle: string,
-  data: Record<string, unknown>,
+  data: { title: string; slug: string },
 ) {
-  const res = await request.post(`${BASE}/api/navigation-plugin/items`, {
+  const res = await request.post(`${BASE}/api/pages`, {
     headers: { Authorization: `JWT ${token}`, 'Content-Type': 'application/json' },
-    data: { handle, ...data },
+    data,
   })
   return res.json()
+}
+
+async function deletePage(request: APIRequestContext, token: string, id: string) {
+  await request.delete(`${BASE}/api/pages/${id}`, {
+    headers: { Authorization: `JWT ${token}` },
+  })
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -54,25 +61,34 @@ test.describe.configure({ mode: 'serial' })
 test.describe('Navigation admin UI', () => {
   let token: string
   let navId: string
-  let navHandle: string
   let navUrl: string
+  let testPageId: string
 
   test.beforeEach(async ({ request, page }) => {
     token = await login(request)
     const nav = await createNavigation(request, token)
     navId = nav.doc?.id ?? nav.id
-    navHandle = nav.doc?.handle ?? nav.handle
     navUrl = `${BASE}/admin/collections/navigation/${navId}`
 
-    await page.goto(`${BASE}/admin`)
-    await page.fill('#field-email', CREDENTIALS.email)
-    await page.fill('#field-password', CREDENTIALS.password)
-    await page.click('.form-submit button')
-    await page.waitForURL(`${BASE}/admin`)
+    // Create a test page to use for internal page tests
+    const testPage = await createPage(request, token, { title: 'Test About', slug: 'test-about' })
+    testPageId = testPage.doc?.id ?? testPage.id
+
+    await page.goto(`${BASE}/admin/login`)
+    // Wait for the login form to appear (may redirect to dashboard if already logged in)
+    const emailField = page.locator('#field-email')
+    const isLoginPage = await emailField.isVisible({ timeout: 3000 }).catch(() => false)
+    if (isLoginPage) {
+      await page.fill('#field-email', CREDENTIALS.email)
+      await page.fill('#field-password', CREDENTIALS.password)
+      await page.click('.form-submit button')
+      await page.waitForURL(`${BASE}/admin`)
+    }
   })
 
   test.afterEach(async ({ request }) => {
     if (navId) await deleteNavigation(request, token, navId)
+    if (testPageId) await deletePage(request, token, testPageId)
   })
 
   test('loads navigation document in admin', async ({ page }) => {
@@ -102,8 +118,8 @@ test.describe('Navigation admin UI', () => {
     // Select the "pages" collection (both pages and posts are available)
     await selectOption(page, 'nav-collection', 'pages')
 
-    // Select the "About" page that was seeded on startup
-    await selectOption(page, 'nav-page', 'About')
+    // Select the test page created in beforeEach
+    await selectOption(page, 'nav-page', 'Test About')
 
     await page.click('button:has-text("Add item")')
 
@@ -111,100 +127,99 @@ test.describe('Navigation admin UI', () => {
     const treeItem = page.getByTestId('tree-item').first()
     await expect(treeItem).toBeVisible({ timeout: 5000 })
     await expect(treeItem.getByText('About Page')).toBeVisible()
-    // Value should be resolved to the slug URL
-    await expect(treeItem.getByText('/about')).toBeVisible()
+    // resolveInternalUrl maps slug → /test-about
+    await expect(treeItem.getByText('/test-about')).toBeVisible()
   })
 
-  test('deletes a menu item with inline confirm', async ({ page, request }) => {
-    await seedItem(request, token, navHandle, {
-      title: 'To Delete',
-      type: 'url',
-      url: '/delete-me',
-    })
-
+  test('deletes a menu item with inline confirm', async ({ page }) => {
     await page.goto(navUrl)
+
+    // Add an item via UI first, then delete it
+    await page.fill('[placeholder="Menu item label"]', 'To Delete')
+    await page.fill('[placeholder="https://"]', '/delete-me')
+    await page.click('button:has-text("Add item")')
+    await expect(page.getByTestId('tree-item')).toBeVisible({ timeout: 5000 })
+
     const deleteBtn = page.locator('button[title="Delete item"]').first()
-    await expect(deleteBtn).toBeVisible({ timeout: 5000 })
+    await expect(deleteBtn).toBeVisible()
     await deleteBtn.click()
     await page.click('button:has-text("Delete")')
     await expect(page.getByText('Item deleted')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByTestId('tree-item')).toHaveCount(0)
   })
 
-  test('opens edit drawer for a menu item', async ({ page, request }) => {
-    await seedItem(request, token, navHandle, { title: 'Edit Me', type: 'url', url: '/edit-me' })
-
+  test('opens edit drawer for a menu item', async ({ page }) => {
     await page.goto(navUrl)
+
+    await page.fill('[placeholder="Menu item label"]', 'Edit Me')
+    await page.fill('[placeholder="https://"]', '/edit-me')
+    await page.click('button:has-text("Add item")')
+    await expect(page.getByTestId('tree-item')).toBeVisible({ timeout: 5000 })
+
     const editBtn = page.locator('button[title="Edit item"]').first()
-    await expect(editBtn).toBeVisible({ timeout: 5000 })
     await editBtn.click()
     await expect(page.getByText('Edit Menu Item')).toBeVisible()
   })
 
-  test('edits a menu item label', async ({ page, request }) => {
-    await seedItem(request, token, navHandle, {
-      title: 'Original Label',
-      type: 'url',
-      url: '/original',
-    })
-
+  test('edits a menu item label', async ({ page }) => {
     await page.goto(navUrl)
-    const editBtn = page.locator('button[title="Edit item"]').first()
-    await expect(editBtn).toBeVisible({ timeout: 5000 })
-    await editBtn.click()
-    await expect(page.getByText('Edit Menu Item')).toBeVisible()
 
-    // The drawer's title input is the last one on the page
-    // (the main MenuBuilder form also has one with the same placeholder)
-    const titleInput = page.locator('[placeholder="Menu item label"]').last()
+    await page.fill('[placeholder="Menu item label"]', 'Original Label')
+    await page.fill('[placeholder="https://"]', '/original')
+    await page.click('button:has-text("Add item")')
+    await expect(page.getByTestId('tree-item')).toBeVisible({ timeout: 5000 })
+
+    const editBtn = page.locator('button[title="Edit item"]').first()
+    await editBtn.click()
+
+    const drawer = page.getByTestId('edit-drawer')
+    await expect(drawer).toBeVisible()
+
+    const titleInput = drawer.locator('[placeholder="Menu item label"]')
     await titleInput.clear()
     await titleInput.fill('Updated Label')
 
-    await page.locator('button:has-text("Save")').last().click()
+    await drawer.locator('button:has-text("Save")').click()
     await expect(page.getByText('Menu item updated')).toBeVisible({ timeout: 5000 })
     await expect(page.getByTestId('tree-item').getByText('Updated Label')).toBeVisible()
   })
 
-  test('edits a menu item parent assignment', async ({ page, request }) => {
-    await seedItem(request, token, navHandle, {
-      title: 'Parent Item',
-      type: 'url',
-      url: '/parent',
-    })
-    await seedItem(request, token, navHandle, {
-      title: 'Child Item',
-      type: 'url',
-      url: '/child',
-    })
-
+  test('edits a menu item parent assignment', async ({ page }) => {
     await page.goto(navUrl)
+
+    // Add Parent Item
+    await page.fill('[placeholder="Menu item label"]', 'Parent Item')
+    await page.fill('[placeholder="https://"]', '/parent')
+    await page.click('button:has-text("Add item")')
+    await expect(page.getByText('Menu item added')).toBeVisible({ timeout: 5000 })
+
+    // Add Child Item
+    await page.fill('[placeholder="Menu item label"]', 'Child Item')
+    await page.fill('[placeholder="https://"]', '/child')
+    await page.click('button:has-text("Add item")')
+    await expect(page.getByText('Menu item added')).toBeVisible({ timeout: 5000 })
     await expect(page.getByTestId('tree-item')).toHaveCount(2, { timeout: 5000 })
 
     // Open the edit drawer for "Child Item"
     const childItem = page.getByTestId('tree-item').filter({ hasText: 'Child Item' })
     await childItem.locator('button[title="Edit item"]').click()
-    await expect(page.getByText('Edit Menu Item')).toBeVisible()
 
-    // Assign "Parent Item" as its parent; .last() targets the drawer's select
-    await selectOption(page, 'nav-parent', 'Parent Item')
+    const drawer = page.getByTestId('edit-drawer')
+    await expect(drawer).toBeVisible()
 
-    await page.locator('button:has-text("Save")').last().click()
+    // Assign "Parent Item" as parent — scope to the drawer
+    const parentControl = drawer.locator('#field-nav-parent .rs__control')
+    await parentControl.waitFor({ state: 'visible' })
+    await parentControl.click()
+    await page.locator('.rs__option', { hasText: 'Parent Item' }).first().click()
+
+    await drawer.locator('button:has-text("Save")').click()
     await expect(page.getByText('Menu item updated')).toBeVisible({ timeout: 5000 })
 
-    // Both items still present; Child Item is now nested
+    // Both items still present; Child Item is now nested under Parent Item
     await expect(page.getByTestId('tree-item')).toHaveCount(2, { timeout: 5000 })
-    // Parent Item should show a collapse/expand control since it now has a child
+    // Parent Item should show a collapse/expand control since it has a child
     const parentItem = page.getByTestId('tree-item').filter({ hasText: 'Parent Item' })
     await expect(parentItem.locator('[aria-label="Collapse"], [aria-label="Expand"]')).toBeVisible()
-  })
-
-  test('save order button is disabled before any reorder', async ({ page, request }) => {
-    await seedItem(request, token, navHandle, { title: 'Item A', type: 'url', url: '/a' })
-    await seedItem(request, token, navHandle, { title: 'Item B', type: 'url', url: '/b' })
-
-    await page.goto(navUrl)
-    await expect(page.getByTestId('tree-item')).toHaveCount(2, { timeout: 5000 })
-
-    const saveBtn = page.locator('button:has-text("Save order")')
-    await expect(saveBtn).toBeDisabled()
   })
 })

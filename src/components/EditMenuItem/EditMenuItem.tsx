@@ -144,7 +144,7 @@ export function EditMenuItem({
       {open && (
         <>
           <div onClick={() => setOpen(false)} role="presentation" style={overlayStyle} />
-          <div style={drawerStyle}>
+          <div data-testid="edit-drawer" style={drawerStyle}>
             <div style={{ alignItems: 'center', display: 'flex', justifyContent: 'space-between' }}>
               <h3 style={{ color: 'var(--theme-elevation-0)', margin: 0 }}>Edit Menu Item</h3>
               <button onClick={() => setOpen(false)} style={btnStyle} type="button">

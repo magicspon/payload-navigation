@@ -29,8 +29,6 @@ export async function MenuTreeServer({
     where: { handle: { equals: handle } },
   })
 
-  console.log(result)
-
   return (
     <MenuTreeClient
       initialDocs={result.docs as unknown as Item[]}

@@ -121,7 +121,7 @@ export function TreeItem({
       cleanupDraggable()
       cleanupDrop()
     }
-  }, [item.id])
+  }, [item.id, level])
 
   const handleToggleCollapse = () => {
     const next = !collapsed
