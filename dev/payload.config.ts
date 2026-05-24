@@ -26,6 +26,7 @@ export default buildConfig({
   collections: [
     {
       slug: 'pages',
+      admin: { useAsTitle: 'title' },
       fields: [
         { name: 'title', type: 'text' },
         { name: 'slug', type: 'text' },
@@ -33,6 +34,7 @@ export default buildConfig({
     },
     {
       slug: 'posts',
+      admin: { useAsTitle: 'title' },
       fields: [
         { name: 'title', type: 'text' },
         { name: 'slug', type: 'text' },
