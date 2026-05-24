@@ -2,7 +2,9 @@ import { notFound } from 'next/navigation'
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
-export default async function FormPage() {
+export const dynamic = 'force-dynamic'
+
+export default async function Page() {
   const payload = await getPayload({ config })
 
   const nav = await payload
