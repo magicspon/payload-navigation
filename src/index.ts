@@ -75,10 +75,10 @@ export const navigationPlugin =
         ({ jsonSchema }) => ({
           ...jsonSchema,
           definitions: {
-            ...((jsonSchema.definitions as Record<string, unknown>) ?? {}),
+            ...(jsonSchema.definitions as Record<string, unknown>),
             NavigationMenuItem: {
               type: 'object',
-              additionalProperties: false,
+              additionalProperties: true,
               required: ['id', 'title', 'type', 'href', 'depth', 'parent', 'collapsed'],
               properties: {
                 id: { type: 'string' },

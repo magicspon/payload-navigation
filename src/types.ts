@@ -4,11 +4,6 @@ export type MenuItemType = 'custom' | 'internal' | 'passive' | 'url'
 
 export type ID = string | number
 
-export type NavigationAccess = {
-  menuItem?: CollectionConfig['access']
-  navigation?: CollectionConfig['access']
-}
-
 export type ResolveInternalUrl = (args: {
   collection: CollectionSlug
   id: ID
@@ -16,10 +11,11 @@ export type ResolveInternalUrl = (args: {
 }) => Promise<string>
 
 export type NavigationPluginConfig = {
-  access?: NavigationAccess
   disabled?: boolean
   internalCollections?: CollectionSlug[]
   maxDepth?: number
+  menuItem?: Omit<Partial<CollectionConfig>, 'slug'>
+  navigation?: Omit<Partial<CollectionConfig>, 'slug'>
   resolveInternalUrl?: ResolveInternalUrl
 }
 
@@ -47,8 +43,8 @@ export type Menu = {
   children?: Menu[]
 } & Item
 
-export type NavigationMenuItem = {
-  children?: NavigationMenuItem[]
+export type NavigationMenuItem<TExtra extends Record<string, unknown> = Record<string, never>> = {
+  children?: NavigationMenuItem<TExtra>[]
   collapsed?: boolean
   depth: number
   href: string
@@ -56,4 +52,4 @@ export type NavigationMenuItem = {
   parent: null | ID
   title: string
   type: string
-}
+} & TExtra

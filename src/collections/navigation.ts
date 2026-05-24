@@ -7,18 +7,29 @@ import { createCleanTree } from '../utils/createTree'
 export const createNavigationCollection = (
   pluginConfig: NavigationPluginConfig,
 ): CollectionConfig => {
-  const { access = {}, internalCollections = [], maxDepth = 3 } = pluginConfig
+  const { internalCollections = [], maxDepth = 3, navigation: navigationConfig = {} } = pluginConfig
+
+  const {
+    fields: extraFields,
+    hooks: extraHooks,
+    admin: extraAdmin,
+    access: extraAccess,
+    ...navigationRest
+  } = navigationConfig
 
   return {
     slug: 'navigation',
+    labels: { plural: 'Menus', singular: 'Menu' },
+    ...navigationRest,
     access: {
       read: () => true,
-      ...access.navigation,
+      ...extraAccess,
     },
     admin: {
       defaultColumns: ['title', 'slug'],
       group: 'Navigation',
       useAsTitle: 'title',
+      ...extraAdmin,
     },
     fields: [
       { name: 'title', type: 'text', required: true },
@@ -46,18 +57,16 @@ export const createNavigationCollection = (
                 limit: 500,
                 sort: '_order',
                 where: { navigation: { equals: originalDoc.id } },
-                select: {
-                  parent: true,
-                  title: true,
-                },
               })
               return createCleanTree(result.docs as unknown as Item[])
             },
           ],
         },
       },
+      ...(extraFields ?? []),
     ],
     hooks: {
+      ...extraHooks,
       beforeDelete: [
         async ({ id, req }) => {
           await req.payload.delete({
@@ -66,8 +75,8 @@ export const createNavigationCollection = (
             where: { navigation: { equals: id } },
           })
         },
+        ...(extraHooks?.beforeDelete ?? []),
       ],
     },
-    labels: { plural: 'Menus', singular: 'Menu' },
   }
 }

@@ -8,23 +8,35 @@ export const createMenuItemCollection = (
   pluginConfig: NavigationPluginConfig,
 ): CollectionConfig => {
   const {
-    access = {},
     internalCollections = [],
     maxDepth = 3,
+    menuItem: menuItemConfig = {},
     resolveInternalUrl = defaultResolveInternalUrl,
   } = pluginConfig
 
+  const {
+    fields: extraFields,
+    hooks: extraHooks,
+    admin: extraAdmin,
+    access: extraAccess,
+    ...menuItemRest
+  } = menuItemConfig
+
   return {
     slug: 'menu_item',
+    labels: { plural: 'Menu Items', singular: 'Menu Item' },
+    orderable: true,
+    ...menuItemRest,
     access: {
       read: () => true,
-      ...access.menuItem,
+      ...(extraAccess ?? {}),
     },
     admin: {
       defaultColumns: ['title', 'type', 'navigation'],
       group: 'Navigation',
       hidden: true,
       useAsTitle: 'title',
+      ...(extraAdmin ?? {}),
     },
     fields: [
       {
@@ -125,8 +137,10 @@ export const createMenuItemCollection = (
         admin: { readOnly: true, position: 'sidebar' },
         label: 'Resolved URL',
       },
+      ...(extraFields ?? []),
     ],
     hooks: {
+      ...(extraHooks ?? {}),
       beforeChange: [
         async ({ data, originalDoc, req }) => {
           if (data?.parent && originalDoc?.id) {
@@ -183,6 +197,7 @@ export const createMenuItemCollection = (
 
           return data
         },
+        ...(extraHooks?.beforeChange ?? []),
       ],
       beforeDelete: [
         async ({ id, req }) => {
@@ -201,10 +216,9 @@ export const createMenuItemCollection = (
             })
           }
         },
+        ...(extraHooks?.beforeDelete ?? []),
       ],
     },
-    labels: { plural: 'Menu Items', singular: 'Menu Item' },
-    orderable: true,
   }
 }
 
