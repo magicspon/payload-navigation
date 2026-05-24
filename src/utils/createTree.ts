@@ -33,18 +33,18 @@ export function createTree(items: Item[]): Menu[] {
 
 const EXCLUDED_FIELDS = new Set([
   '_order',
-  'navigation',
-  'internal',
-  'url',
-  'custom',
-  'passive',
-  'id',
-  'type',
   'collapsed',
+  'custom',
   'depth',
-  'parent',
-  'title',
   'href',
+  'id',
+  'internal',
+  'navigation',
+  'parent',
+  'passive',
+  'title',
+  'type',
+  'url',
 ])
 
 function buildCleanChildren<TExtra extends Record<string, unknown>>(

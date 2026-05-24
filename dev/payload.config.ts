@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url'
 
 import { testEmailAdapter } from './helpers/testEmailAdapter'
 import { seed } from './seed'
-import { Page } from 'payload-types'
+import type { Page } from 'payload-types'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
