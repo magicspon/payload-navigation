@@ -2,6 +2,8 @@
 
 A [Payload CMS](https://payloadcms.com) plugin for managing navigation menus. Adds a drag-and-drop tree UI to the admin panel, supports multiple link types including internal page relationships, and writes a precomputed clean tree to the navigation document for easy frontend consumption.
 
+https://github.com/user-attachments/assets/c26aa293-ea1a-4e89-b5ee-582d44704684
+
 ## Features
 
 - Drag-and-drop menu builder in the Payload admin
