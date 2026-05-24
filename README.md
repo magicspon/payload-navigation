@@ -10,7 +10,7 @@ A [Payload CMS](https://payloadcms.com) plugin for managing navigation menus. Ad
 - Automatically resolves internal page URLs via a callback
 - Prevents deletion of pages that are referenced by a menu item
 - Cascades deletion of menu items when a navigation is deleted
-- Writes a precomputed `data` field (clean JSON tree) to the navigation document on every change
+- Writes a precomputed `items` field (clean JSON tree) to the navigation document on every change
 
 ## Installation
 
@@ -41,14 +41,14 @@ export default buildConfig({
 
 ## Options
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `disabled` | `boolean` | `false` | Disable the plugin without removing it |
-| `internalCollections` | `string[]` | `[]` | Collection slugs that can be linked as internal pages |
-| `maxDepth` | `number` | `3` | Maximum nesting depth for menu items |
-| `resolveInternalUrl` | `ResolveInternalUrl` | Returns `#id` | Async function to resolve a URL from an internal document |
-| `menuItem` | `Omit<Partial<CollectionConfig>, 'slug'>` | `{}` | Extend or override the `menu_item` collection |
-| `navigation` | `Omit<Partial<CollectionConfig>, 'slug'>` | `{}` | Extend or override the `navigation` collection |
+| Option                | Type                                      | Default       | Description                                               |
+| --------------------- | ----------------------------------------- | ------------- | --------------------------------------------------------- |
+| `disabled`            | `boolean`                                 | `false`       | Disable the plugin without removing it                    |
+| `internalCollections` | `string[]`                                | `[]`          | Collection slugs that can be linked as internal pages     |
+| `maxDepth`            | `number`                                  | `3`           | Maximum nesting depth for menu items                      |
+| `resolveInternalUrl`  | `ResolveInternalUrl`                      | Returns `#id` | Async function to resolve a URL from an internal document |
+| `menuItem`            | `Omit<Partial<CollectionConfig>, 'slug'>` | `{}`          | Extend or override the `menu_item` collection             |
+| `navigation`          | `Omit<Partial<CollectionConfig>, 'slug'>` | `{}`          | Extend or override the `navigation` collection            |
 
 ### `resolveInternalUrl`
 
@@ -66,13 +66,13 @@ type ResolveInternalUrl = (args: {
 
 Both options accept any `CollectionConfig` property except `slug`. The merge behaviour differs by property type:
 
-| Property | Behaviour |
-|---|---|
-| `fields` | Appended after plugin fields |
-| `hooks` | Run after plugin hooks (plugin invariants preserved) |
-| `admin` | Shallow-merged with plugin defaults |
-| `access` | Shallow-merged — `read` defaults to `() => true` |
-| Everything else | Consumer value overrides plugin default |
+| Property        | Behaviour                                            |
+| --------------- | ---------------------------------------------------- |
+| `fields`        | Appended after plugin fields                         |
+| `hooks`         | Run after plugin hooks (plugin invariants preserved) |
+| `admin`         | Shallow-merged with plugin defaults                  |
+| `access`        | Shallow-merged — `read` defaults to `() => true`     |
+| Everything else | Consumer value overrides plugin default              |
 
 ```ts
 navigationPlugin({
@@ -118,7 +118,7 @@ type NavigationMenuItem<TExtra extends Record<string, unknown> = Record<string, 
   id: string
   title: string
   type: string
-  href: string      // resolved URL for all types
+  href: string // resolved URL for all types
   depth: number
   parent: string | null
   collapsed: boolean
@@ -142,12 +142,12 @@ const tree = nav.docs[0]?.items as MyNavItem[]
 
 ## Link types
 
-| Type | Description |
-|---|---|
-| `url` | An absolute or relative web address |
+| Type       | Description                                       |
+| ---------- | ------------------------------------------------- |
+| `url`      | An absolute or relative web address               |
 | `internal` | A document from one of your `internalCollections` |
-| `custom` | Any string value (e.g. an anchor `#section`) |
-| `passive` | A label with no link (for parent-only items) |
+| `custom`   | Any string value (e.g. an anchor `#section`)      |
+| `passive`  | A label with no link (for parent-only items)      |
 
 ## React components
 
