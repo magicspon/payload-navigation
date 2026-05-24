@@ -1,19 +1,12 @@
 import type { Config, PayloadRequest, Plugin } from 'payload'
 import { APIError } from 'payload'
 
-import type { NavigationPluginConfig } from './types'
+import type { ID, NavigationPluginConfig } from './types'
 
 import { createMenuItemCollection } from './collections/menu-item'
 import { createNavigationCollection } from './collections/navigation'
-import { itemsAddHandler } from './endpoints/items-add'
-import { itemsDeleteHandler } from './endpoints/items-delete'
-import { itemsGetHandler } from './endpoints/items-get'
-import { itemsPatchCollapsedHandler } from './endpoints/items-patch-collapsed'
-import { itemsUpdateHandler } from './endpoints/items-update'
-import { parentOptionsHandler } from './endpoints/parent-options'
-import { reorderHandler } from './endpoints/reorder'
 
-export type { NavigationPluginConfig } from './types'
+export type { NavigationPluginConfig, ResolveInternalUrl } from './types'
 export type { Item, Menu, MenuItemType, NavigationMenuItem } from './types'
 
 export const navigationPlugin =
@@ -22,19 +15,19 @@ export const navigationPlugin =
     const navigationCollection = createNavigationCollection(pluginOptions)
     const menuItemCollection = createMenuItemCollection(pluginOptions)
 
-    config.collections = [
-      ...(config.collections ?? []),
-      navigationCollection,
-      menuItemCollection,
-    ]
+    config.collections = [...(config.collections ?? []), navigationCollection, menuItemCollection]
 
-    if (pluginOptions.disabled) {return config}
+    if (pluginOptions.disabled) {
+      return config
+    }
 
     const { internalCollections = [] } = pluginOptions
 
     if (internalCollections.length > 0) {
       config.collections = config.collections.map((collection) => {
-        if (!internalCollections.includes(collection.slug)) {return collection}
+        if (!internalCollections.includes(collection.slug)) {
+          return collection
+        }
 
         const slug = collection.slug
         return {
@@ -43,7 +36,7 @@ export const navigationPlugin =
             ...collection.hooks,
             beforeDelete: [
               ...(collection.hooks?.beforeDelete ?? []),
-              async ({ id, req }: { id: number | string; req: PayloadRequest }) => {
+              async ({ id, req }: { id: ID; req: PayloadRequest }) => {
                 const result = await req.payload.find({
                   collection: 'menu_item',
                   depth: 0,
@@ -82,10 +75,10 @@ export const navigationPlugin =
         ({ jsonSchema }) => ({
           ...jsonSchema,
           definitions: {
-            ...(jsonSchema.definitions as Record<string, unknown> ?? {}),
+            ...(jsonSchema.definitions as Record<string, unknown>),
             NavigationMenuItem: {
               type: 'object',
-              additionalProperties: false,
+              additionalProperties: true,
               required: ['id', 'title', 'type', 'href', 'depth', 'parent', 'collapsed'],
               properties: {
                 id: { type: 'string' },
@@ -102,17 +95,6 @@ export const navigationPlugin =
         }),
       ],
     }
-
-    config.endpoints = [
-      ...(config.endpoints ?? []),
-      { handler: itemsGetHandler, method: 'get', path: '/navigation-plugin/items' },
-      { handler: itemsAddHandler, method: 'post', path: '/navigation-plugin/items' },
-      { handler: itemsUpdateHandler, method: 'put', path: '/navigation-plugin/items/:id' },
-      { handler: itemsPatchCollapsedHandler, method: 'patch', path: '/navigation-plugin/items/:id' },
-      { handler: itemsDeleteHandler, method: 'delete', path: '/navigation-plugin/items/:id' },
-      { handler: reorderHandler, method: 'post', path: '/navigation-plugin/reorder' },
-      { handler: parentOptionsHandler, method: 'get', path: '/navigation-plugin/parent-options' },
-    ]
 
     return config
   }

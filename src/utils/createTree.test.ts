@@ -5,11 +5,11 @@ import type { Item } from '../types'
 import { createCleanTree, createTree } from './createTree'
 
 const items: Item[] = [
-  { id: '1', type: 'url', depth: 0, handle: 'main', parent: null, title: 'Home', value: '/' },
-  { id: '2', type: 'url', depth: 0, handle: 'main', parent: null, title: 'About', value: '/about' },
-  { id: '3', type: 'url', depth: 1, handle: 'main', parent: '2', title: 'Team', value: '/about/team' },
-  { id: '4', type: 'url', depth: 1, handle: 'main', parent: '2', title: 'History', value: '/about/history' },
-  { id: '5', type: 'url', depth: 2, handle: 'main', parent: '3', title: 'Staff', value: '/about/team/staff' },
+  { id: '1', type: 'url', depth: 0, parent: null, title: 'Home', href: '/' },
+  { id: '2', type: 'url', depth: 0, parent: null, title: 'About', href: '/about' },
+  { id: '3', type: 'url', depth: 1, parent: '2', title: 'Team', href: '/about/team' },
+  { id: '4', type: 'url', depth: 1, parent: '2', title: 'History', href: '/about/history' },
+  { id: '5', type: 'url', depth: 2, parent: '3', title: 'Staff', href: '/about/team/staff' },
 ]
 
 describe('createTree', () => {
@@ -36,8 +36,8 @@ describe('createTree', () => {
 
   test('handles object parent ids', () => {
     const withObjParent: Item[] = [
-      { id: 'a', depth: 0, handle: 'h', parent: null, title: 'Root' },
-      { id: 'b', depth: 1, handle: 'h', parent: { id: 'a' }, title: 'Child' },
+      { id: 'a', depth: 0, parent: null, title: 'Root' },
+      { id: 'b', depth: 1, parent: { id: 'a' }, title: 'Child' },
     ]
     const tree = createTree(withObjParent)
     expect(tree[0]?.children).toHaveLength(1)

@@ -7,38 +7,42 @@ import {
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import { DropIndicator } from '@atlaskit/pragmatic-drag-and-drop-react-drop-indicator/box'
 import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
+import {
+  ChevronIcon,
+  DragHandleIcon,
+  EditIcon,
+  PlusIcon,
+  toast,
+  useDocumentDrawer,
+} from '@payloadcms/ui'
 import * as React from 'react'
-import { ChevronIcon, DragHandleIcon, PlusIcon } from '@payloadcms/ui'
 
-import type { Item, Menu } from '../../types'
-
-type MutationCallback = (tree: Menu[], docs: Item[]) => void
+import type { ID, Menu } from '../../types'
 
 import { DeleteMenuItem } from '../DeleteMenuItem/DeleteMenuItem'
-import { EditMenuItem } from '../EditMenuItem/EditMenuItem'
 
 type Props = {
-  handle: string
-  internalCollections: string[]
+  apiBase: string
+  autoOpen?: boolean
   isFirst: boolean
   isLast: boolean
   item: Menu
   level: number
-  onDeleted: MutationCallback
-  onMove: (id: string, direction: 'down' | 'up') => void
-  onUpdated: MutationCallback
+  onAutoOpened?: () => void
+  onMove: (id: ID, direction: 'down' | 'up') => void
+  onRefresh: () => void
 }
 
 export function TreeItem({
-  handle,
-  internalCollections,
+  apiBase,
+  autoOpen,
   isFirst,
   isLast,
   item,
   level,
-  onDeleted,
+  onAutoOpened,
   onMove,
-  onUpdated,
+  onRefresh,
 }: Props) {
   const rowRef = React.useRef<HTMLDivElement>(null)
   const dragHandleRef = React.useRef<HTMLSpanElement>(null)
@@ -46,17 +50,30 @@ export function TreeItem({
   const [closestEdge, setClosestEdge] = React.useState<Edge | 'inside' | 'unnest' | null>(null)
   const [collapsed, setCollapsed] = React.useState<boolean>(item.collapsed ?? false)
 
+  const [DocumentDrawer, , { closeDrawer, openDrawer }] = useDocumentDrawer({
+    id: String(item.id),
+    collectionSlug: 'menu_item',
+  })
+
+  const autoOpenFired = React.useRef(false)
+  React.useEffect(() => {
+    if (autoOpen && !autoOpenFired.current) {
+      autoOpenFired.current = true
+      openDrawer()
+      onAutoOpened?.()
+    }
+  }, [autoOpen, openDrawer, onAutoOpened])
+
   React.useEffect(() => {
     setCollapsed(item.collapsed ?? false)
   }, [item.id, item.collapsed])
+
   const hasChildren = (item.children?.length ?? 0) > 0
 
   React.useEffect(() => {
     const row = rowRef.current
     const dragHandle = dragHandleRef.current
-    if (!row || !dragHandle) {
-      return
-    }
+    if (!row || !dragHandle) return
 
     const cleanupDraggable = draggable({
       element: row,
@@ -73,11 +90,10 @@ export function TreeItem({
         const rect = element.getBoundingClientRect()
         const data = { id: String(item.id) }
 
-        // Self-drag: detect leftward gesture to unnest by N levels
         if (source.data.id === String(item.id)) {
           if (level > 0) {
-            const INDENT_PX = 24 // 1.5rem at 16px/rem
-            const BASE_PX = 8 // 0.5rem base padding
+            const INDENT_PX = 24
+            const BASE_PX = 8
             const desiredLevel = Math.max(
               0,
               Math.floor((input.clientX - rect.left - BASE_PX) / INDENT_PX),
@@ -126,6 +142,15 @@ export function TreeItem({
   const handleToggleCollapse = () => {
     const next = !collapsed
     setCollapsed(next)
+    fetch(`${apiBase}/menu_item/${item.id}`, {
+      body: JSON.stringify({ collapsed: next }),
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH',
+    }).catch(() => {
+      setCollapsed(!next)
+      toast.error('Failed to save')
+    })
   }
 
   return (
@@ -157,7 +182,7 @@ export function TreeItem({
           marginBottom: '2px',
           opacity: isDragging ? 0.4 : 1,
           padding: '0.5rem',
-          paddingLeft: `${0.5 + level * 2.75}rem`,
+          paddingLeft: `${0.5 + level * 1.75}rem`,
           position: 'relative',
         }}
       >
@@ -166,11 +191,11 @@ export function TreeItem({
           style={{
             color: 'var(--theme-elevation-500)',
             cursor: 'grab',
+            display: 'grid',
             lineHeight: 1,
+            placeItems: 'center',
             userSelect: 'none',
             width: 40,
-            display: 'grid',
-            placeItems: 'center',
           }}
           title="Drag to reorder"
         >
@@ -183,7 +208,7 @@ export function TreeItem({
           >
             {item.title}
           </div>
-          {item.value && (
+          {item.href && (
             <div
               style={{
                 color: 'var(--theme-elevation-500)',
@@ -193,7 +218,7 @@ export function TreeItem({
                 whiteSpace: 'nowrap',
               }}
             >
-              {item.value}
+              {item.href}
             </div>
           )}
         </div>
@@ -208,14 +233,14 @@ export function TreeItem({
                 border: 'none',
                 color: 'var(--theme-elevation-700)',
                 cursor: 'pointer',
+                display: 'grid',
                 flexShrink: 0,
                 fontSize: '0.625rem',
                 lineHeight: 1,
                 padding: '2px',
+                placeItems: 'center',
                 transition: 'transform 120ms ease',
                 width: 26.5,
-                display: 'grid',
-                placeItems: 'center',
               }}
               type="button"
             >
@@ -224,10 +249,10 @@ export function TreeItem({
               ) : (
                 <span
                   style={{
-                    width: 10,
-                    height: 1,
-                    display: 'block',
                     backgroundColor: 'var(--theme-elevation-700)',
+                    display: 'block',
+                    height: 1,
+                    width: 10,
                   }}
                 />
               )}
@@ -267,32 +292,47 @@ export function TreeItem({
           >
             <ChevronIcon />
           </button>
-          <EditMenuItem
-            {...item}
-            handle={handle}
-            internalCollections={internalCollections}
-            onUpdated={onUpdated}
-          />
-          <DeleteMenuItem handle={handle} id={String(item.id)} onDeleted={onDeleted} />
+          <button
+            onClick={openDrawer}
+            style={{
+              alignItems: 'center',
+              background: 'transparent',
+              border: 0,
+              color: 'var(--theme-elevation-700)',
+              cursor: 'pointer',
+              display: 'flex',
+              padding: '0.25rem',
+            }}
+            title="Edit item"
+            type="button"
+          >
+            <EditIcon />
+          </button>
+          <DeleteMenuItem apiBase={apiBase} id={String(item.id)} onDeleted={onRefresh} />
         </div>
 
         {closestEdge === 'top' && <DropIndicator edge="top" />}
         {closestEdge === 'bottom' && <DropIndicator edge="bottom" />}
       </div>
 
+      <DocumentDrawer
+        onSave={() => {
+          closeDrawer()
+          onRefresh()
+        }}
+      />
+
       {!collapsed &&
         item.children?.map((child, idx) => (
           <TreeItem
-            handle={handle}
-            internalCollections={internalCollections}
+            apiBase={apiBase}
             isFirst={idx === 0}
             isLast={idx === (item.children?.length ?? 0) - 1}
             item={child}
             key={child.id}
             level={level + 1}
-            onDeleted={onDeleted}
             onMove={onMove}
-            onUpdated={onUpdated}
+            onRefresh={onRefresh}
           />
         ))}
     </div>

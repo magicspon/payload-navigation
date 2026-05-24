@@ -1,13 +1,12 @@
 'use client'
-import { toast, useConfig, XIcon } from '@payloadcms/ui'
+import { toast, XIcon } from '@payloadcms/ui'
 import * as React from 'react'
-
-import type { Item, Menu } from '../../types'
+import type { ID } from '../../types'
 
 type Props = {
-  handle: string
-  id: string
-  onDeleted: (tree: Menu[], docs: Item[]) => void
+  apiBase: string
+  id: ID
+  onDeleted: () => void
 }
 
 const btnStyle: React.CSSProperties = {
@@ -20,25 +19,21 @@ const btnStyle: React.CSSProperties = {
   padding: '0.25rem',
 }
 
-export function DeleteMenuItem({ id, handle, onDeleted }: Props) {
-  const { config } = useConfig()
+export function DeleteMenuItem({ id, apiBase, onDeleted }: Props) {
   const [confirming, setConfirming] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
-
-  const apiBase = `${config.serverURL}${config.routes.api}/navigation-plugin`
 
   const handleDelete = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${apiBase}/items/${id}?handle=${encodeURIComponent(handle)}`, {
+      const res = await fetch(`${apiBase}/menu_item/${id}`, {
         credentials: 'include',
         method: 'DELETE',
       })
       if (!res.ok) {
         throw new Error('Failed to delete')
       }
-      const { tree, docs } = await res.json()
-      onDeleted(tree, docs)
+      onDeleted()
       toast.success('Item deleted')
     } catch {
       toast.error('Failed to delete item')

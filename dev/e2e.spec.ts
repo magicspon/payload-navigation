@@ -1,15 +1,14 @@
 import { expect, test } from '@playwright/test'
-import type { APIRequestContext, Page } from '@playwright/test'
+import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 const BASE = 'http://localhost:3000'
 const CREDENTIALS = { email: 'dev@payloadcms.com', password: 'test' }
 
-// Open a Payload react-select and choose an option.
-// Payload renders <div id="field-{path}"> as the outer wrapper; react-select
-// lives inside it with class "rs__control". We use .last() to prefer the
-// element rendered later in the DOM (e.g. inside the edit drawer overlay).
-async function selectOption(page: Page, fieldPath: string, optionText: string) {
-  const control = page.locator(`#field-${fieldPath} .rs__control`).last()
+function getDrawer(page: Page) {
+  return page.locator('dialog[open]').last()
+}
+
+async function selectOption(control: Locator, page: Page, optionText: string) {
   await control.waitFor({ state: 'visible' })
   await control.click()
   await page.locator('.rs__option', { hasText: optionText }).first().click()
@@ -56,6 +55,22 @@ async function deletePage(request: APIRequestContext, token: string, id: string)
   })
 }
 
+// Clicks '+ Add item', waits for the drawer to open, returns the drawer locator.
+async function clickAddItem(page: Page) {
+  await page.getByRole('button', { name: '+ Add item' }).click()
+  const drawer = getDrawer(page)
+  await drawer.waitFor({ state: 'visible', timeout: 20_000 })
+  return drawer
+}
+
+// Fills a URL-type item in an open drawer and saves it.
+async function fillAndSave(drawer: Locator, page: Page, title: string, url: string) {
+  await drawer.locator('input[name="title"]').fill(title)
+  await drawer.locator('input[name="url"]').fill(url)
+  await drawer.getByRole('button', { name: /save/i }).click()
+  await expect(page.getByTestId('tree-item').first()).toBeVisible({ timeout: 20_000 })
+}
+
 test.describe.configure({ mode: 'serial' })
 
 test.describe('Navigation admin UI', () => {
@@ -64,16 +79,14 @@ test.describe('Navigation admin UI', () => {
   let navUrl: string
   let testPageId: string
 
-  test.beforeEach(async ({ request, page }) => {
+  test.beforeEach(async ({ request }) => {
     token = await login(request)
     const nav = await createNavigation(request, token)
     navId = nav.doc?.id ?? nav.id
     navUrl = `${BASE}/admin/collections/navigation/${navId}`
 
-    // Create a test page to use for internal page tests
     const testPage = await createPage(request, token, { title: 'Test About', slug: 'test-about' })
     testPageId = testPage.doc?.id ?? testPage.id
-
   })
 
   test.afterEach(async ({ request }) => {
@@ -86,130 +99,115 @@ test.describe('Navigation admin UI', () => {
     await expect(page.getByRole('heading', { name: 'E2E Test Menu' })).toBeVisible()
   })
 
-  test('adds a URL menu item via the sidebar form', async ({ page }) => {
+  test('add button opens edit drawer automatically', async ({ page }) => {
     await page.goto(navUrl)
+    const drawer = await clickAddItem(page)
+    await expect(drawer).toBeVisible()
+  })
 
-    await page.fill('[placeholder="Menu item label"]', 'Home')
-    await page.fill('[placeholder="https://"]', 'https://example.com')
-    await page.click('button:has-text("Add item")')
+  test('adds a URL menu item', async ({ page }) => {
+    await page.goto(navUrl)
+    const drawer = await clickAddItem(page)
+    await fillAndSave(drawer, page, 'Home', 'https://example.com')
 
-    await expect(page.getByText('Menu item added')).toBeVisible({ timeout: 5000 })
-    await expect(page.getByTestId('tree-item')).toBeVisible({ timeout: 5000 })
+    const treeItem = page.getByTestId('tree-item').first()
+    await expect(treeItem.getByText('Home')).toBeVisible()
+    await expect(treeItem.getByText('https://example.com')).toBeVisible()
   })
 
   test('adds an internal page menu item', async ({ page }) => {
     await page.goto(navUrl)
+    const drawer = await clickAddItem(page)
 
-    await page.fill('[placeholder="Menu item label"]', 'About Page')
+    await drawer.locator('input[name="title"]').fill('About Page')
 
-    // Switch to "Internal page" type
-    await selectOption(page, 'nav-type', 'Internal page')
+    await selectOption(drawer.locator('#field-type .rs__control'), page, 'Internal page')
 
-    // Select the "pages" collection (both pages and posts are available)
-    await selectOption(page, 'nav-collection', 'pages')
+    // For a multi-collection relationship Payload renders a collection picker then value picker.
+    // For a single-collection relationship it renders a single picker directly.
+    const internalControl = drawer.locator('#field-internal .rs__control').last()
+    await selectOption(internalControl, page, 'Test About')
 
-    // Select the test page created in beforeEach
-    await selectOption(page, 'nav-page', 'Test About')
+    await drawer.getByRole('button', { name: /save/i }).click()
+    await expect(page.getByTestId('tree-item').first()).toBeVisible({ timeout: 10_000 })
 
-    await page.click('button:has-text("Add item")')
-
-    await expect(page.getByText('Menu item added')).toBeVisible({ timeout: 5000 })
     const treeItem = page.getByTestId('tree-item').first()
-    await expect(treeItem).toBeVisible({ timeout: 5000 })
     await expect(treeItem.getByText('About Page')).toBeVisible()
-    // resolveInternalUrl maps slug → /test-about
     await expect(treeItem.getByText('/test-about')).toBeVisible()
   })
 
   test('deletes a menu item with inline confirm', async ({ page }) => {
     await page.goto(navUrl)
 
-    // Add an item via UI first, then delete it
-    await page.fill('[placeholder="Menu item label"]', 'To Delete')
-    await page.fill('[placeholder="https://"]', '/delete-me')
-    await page.click('button:has-text("Add item")')
-    await expect(page.getByTestId('tree-item')).toBeVisible({ timeout: 5000 })
+    const drawer = await clickAddItem(page)
+    await fillAndSave(drawer, page, 'To Delete', '/delete-me')
 
     const deleteBtn = page.locator('button[title="Delete item"]').first()
     await expect(deleteBtn).toBeVisible()
     await deleteBtn.click()
-    await page.click('button:has-text("Delete")')
-    await expect(page.getByText('Item deleted')).toBeVisible({ timeout: 5000 })
+    await page.getByRole('button', { name: 'Delete' }).click()
+
+    await expect(page.getByText('Item deleted')).toBeVisible({ timeout: 5_000 })
     await expect(page.getByTestId('tree-item')).toHaveCount(0)
   })
 
-  test('opens edit drawer for a menu item', async ({ page }) => {
+  test('opens edit drawer for an existing item', async ({ page }) => {
     await page.goto(navUrl)
 
-    await page.fill('[placeholder="Menu item label"]', 'Edit Me')
-    await page.fill('[placeholder="https://"]', '/edit-me')
-    await page.click('button:has-text("Add item")')
-    await expect(page.getByTestId('tree-item')).toBeVisible({ timeout: 5000 })
+    const drawer = await clickAddItem(page)
+    await fillAndSave(drawer, page, 'Edit Me', '/edit-me')
 
-    const editBtn = page.locator('button[title="Edit item"]').first()
-    await editBtn.click()
-    await expect(page.getByText('Edit Menu Item')).toBeVisible()
+    await page.locator('button[title="Edit item"]').first().click()
+    await expect(getDrawer(page)).toBeVisible({ timeout: 5_000 })
   })
 
-  test('edits a menu item label', async ({ page }) => {
+  test('edits a menu item title', async ({ page }) => {
     await page.goto(navUrl)
 
-    await page.fill('[placeholder="Menu item label"]', 'Original Label')
-    await page.fill('[placeholder="https://"]', '/original')
-    await page.click('button:has-text("Add item")')
-    await expect(page.getByTestId('tree-item')).toBeVisible({ timeout: 5000 })
+    const drawer = await clickAddItem(page)
+    await fillAndSave(drawer, page, 'Original Label', '/original')
 
-    const editBtn = page.locator('button[title="Edit item"]').first()
-    await editBtn.click()
+    await page.locator('button[title="Edit item"]').first().click()
+    const editDrawer = getDrawer(page)
+    await editDrawer.waitFor({ state: 'visible' })
 
-    const drawer = page.getByTestId('edit-drawer')
-    await expect(drawer).toBeVisible()
-
-    const titleInput = drawer.locator('[placeholder="Menu item label"]')
+    const titleInput = editDrawer.locator('input[name="title"]')
     await titleInput.clear()
     await titleInput.fill('Updated Label')
+    await editDrawer.getByRole('button', { name: /save/i }).click()
 
-    await drawer.locator('button:has-text("Save")').click()
-    await expect(page.getByText('Menu item updated')).toBeVisible({ timeout: 5000 })
-    await expect(page.getByTestId('tree-item').getByText('Updated Label')).toBeVisible()
+    await expect(page.getByTestId('tree-item').getByText('Updated Label')).toBeVisible({
+      timeout: 10_000,
+    })
   })
 
-  test('edits a menu item parent assignment', async ({ page }) => {
+  test('assigns a parent via the edit drawer', async ({ page }) => {
     await page.goto(navUrl)
 
-    // Add Parent Item
-    await page.fill('[placeholder="Menu item label"]', 'Parent Item')
-    await page.fill('[placeholder="https://"]', '/parent')
-    await page.click('button:has-text("Add item")')
-    await expect(page.getByText('Menu item added')).toBeVisible({ timeout: 5000 })
+    // Add parent
+    let drawer = await clickAddItem(page)
+    await fillAndSave(drawer, page, 'Parent Item', '/parent')
 
-    // Add Child Item
-    await page.fill('[placeholder="Menu item label"]', 'Child Item')
-    await page.fill('[placeholder="https://"]', '/child')
-    await page.click('button:has-text("Add item")')
-    await expect(page.getByText('Menu item added')).toBeVisible({ timeout: 5000 })
-    await expect(page.getByTestId('tree-item')).toHaveCount(2, { timeout: 5000 })
+    // Add child
+    drawer = await clickAddItem(page)
+    await fillAndSave(drawer, page, 'Child Item', '/child')
 
-    // Open the edit drawer for "Child Item"
+    await expect(page.getByTestId('tree-item')).toHaveCount(2, { timeout: 5_000 })
+
+    // Assign parent to child
     const childItem = page.getByTestId('tree-item').filter({ hasText: 'Child Item' })
     await childItem.locator('button[title="Edit item"]').click()
+    const editDrawer = getDrawer(page)
+    await editDrawer.waitFor({ state: 'visible' })
 
-    const drawer = page.getByTestId('edit-drawer')
-    await expect(drawer).toBeVisible()
+    await selectOption(editDrawer.locator('#field-parent .rs__control'), page, 'Parent Item')
 
-    // Assign "Parent Item" as parent — scope to the drawer
-    const parentControl = drawer.locator('#field-nav-parent .rs__control')
-    await parentControl.waitFor({ state: 'visible' })
-    await parentControl.click()
-    await page.locator('.rs__option', { hasText: 'Parent Item' }).first().click()
+    await editDrawer.getByRole('button', { name: /save/i }).click()
 
-    await drawer.locator('button:has-text("Save")').click()
-    await expect(page.getByText('Menu item updated')).toBeVisible({ timeout: 5000 })
-
-    // Both items still present; Child Item is now nested under Parent Item
-    await expect(page.getByTestId('tree-item')).toHaveCount(2, { timeout: 5000 })
-    // Parent Item should show a collapse/expand control since it has a child
+    await expect(page.getByTestId('tree-item')).toHaveCount(2, { timeout: 10_000 })
     const parentItem = page.getByTestId('tree-item').filter({ hasText: 'Parent Item' })
-    await expect(parentItem.locator('[aria-label="Collapse"], [aria-label="Expand"]')).toBeVisible()
+    await expect(
+      parentItem.locator('[aria-label="Collapse"], [aria-label="Expand"]'),
+    ).toBeVisible()
   })
 })

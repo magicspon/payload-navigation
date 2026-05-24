@@ -2,6 +2,8 @@
 
 A [Payload CMS](https://payloadcms.com) plugin for managing navigation menus. Adds a drag-and-drop tree UI to the admin panel, supports multiple link types including internal page relationships, and writes a precomputed clean tree to the navigation document for easy frontend consumption.
 
+https://github.com/user-attachments/assets/c26aa293-ea1a-4e89-b5ee-582d44704684
+
 ## Features
 
 - Drag-and-drop menu builder in the Payload admin
@@ -10,7 +12,7 @@ A [Payload CMS](https://payloadcms.com) plugin for managing navigation menus. Ad
 - Automatically resolves internal page URLs via a callback
 - Prevents deletion of pages that are referenced by a menu item
 - Cascades deletion of menu items when a navigation is deleted
-- Writes a precomputed `data` field (clean JSON tree) to the navigation document on every change
+- Writes a precomputed `items` field (clean JSON tree) to the navigation document on every change
 
 ## Installation
 
@@ -41,13 +43,14 @@ export default buildConfig({
 
 ## Options
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `disabled` | `boolean` | `false` | Disable the plugin without removing it |
-| `internalCollections` | `string[]` | `[]` | Collection slugs that can be linked as internal pages |
-| `maxDepth` | `number` | `3` | Maximum nesting depth for menu items |
-| `resolveInternalUrl` | `ResolveInternalUrl` | Returns `#id` | Async function to resolve a URL from an internal document |
-| `access` | `NavigationAccess` | Payload defaults | Override collection-level access for `navigation` and `menu_item` |
+| Option                | Type                                      | Default       | Description                                               |
+| --------------------- | ----------------------------------------- | ------------- | --------------------------------------------------------- |
+| `disabled`            | `boolean`                                 | `false`       | Disable the plugin without removing it                    |
+| `internalCollections` | `string[]`                                | `[]`          | Collection slugs that can be linked as internal pages     |
+| `maxDepth`            | `number`                                  | `3`           | Maximum nesting depth for menu items                      |
+| `resolveInternalUrl`  | `ResolveInternalUrl`                      | Returns `#id` | Async function to resolve a URL from an internal document |
+| `menuItem`            | `Omit<Partial<CollectionConfig>, 'slug'>` | `{}`          | Extend or override the `menu_item` collection             |
+| `navigation`          | `Omit<Partial<CollectionConfig>, 'slug'>` | `{}`          | Extend or override the `navigation` collection            |
 
 ### `resolveInternalUrl`
 
@@ -61,25 +64,42 @@ type ResolveInternalUrl = (args: {
 }) => Promise<string>
 ```
 
-### `access`
+### `menuItem` and `navigation`
 
-```ts
-type NavigationAccess = {
-  navigation?: CollectionConfig['access']
-  menuItem?: CollectionConfig['access']
-}
-```
+Both options accept any `CollectionConfig` property except `slug`. The merge behaviour differs by property type:
 
-Both collections default `read` to public (`() => true`). Override any operation:
+| Property        | Behaviour                                            |
+| --------------- | ---------------------------------------------------- |
+| `fields`        | Appended after plugin fields                         |
+| `hooks`         | Run after plugin hooks (plugin invariants preserved) |
+| `admin`         | Shallow-merged with plugin defaults                  |
+| `access`        | Shallow-merged — `read` defaults to `() => true`     |
+| Everything else | Consumer value overrides plugin default              |
 
 ```ts
 navigationPlugin({
-  access: {
-    navigation: {
+  menuItem: {
+    // extra fields appear in the drawer and pass through to the items tree output
+    fields: [
+      { name: 'badge', type: 'text' },
+      { name: 'icon', type: 'text' },
+    ],
+    hooks: {
+      afterChange: [({ doc }) => revalidateCache(doc)],
+    },
+    admin: { hidden: false }, // un-hide the collection
+    access: {
       create: ({ req }) => req.user?.role === 'admin',
       update: ({ req }) => req.user?.role === 'admin',
       delete: ({ req }) => req.user?.role === 'admin',
     },
+  },
+  navigation: {
+    access: {
+      create: ({ req }) => req.user?.role === 'admin',
+      delete: ({ req }) => req.user?.role === 'admin',
+    },
+    versions: { drafts: true },
   },
 })
 ```
@@ -93,46 +113,50 @@ The plugin registers two collections:
 
 ## The `items` field
 
-Every time a menu item is added, edited, reordered, or deleted, the navigation document's `items` field is updated with a clean JSON tree:
+The navigation document's `items` field contains a precomputed clean JSON tree, built from the `menu_item` collection on every read:
 
 ```ts
-type NavigationMenuItem = {
+type NavigationMenuItem<TExtra extends Record<string, unknown> = Record<string, never>> = {
   id: string
   title: string
   type: string
-  href: string      // resolved URL for all types
+  href: string // resolved URL for all types
   depth: number
   parent: string | null
-  children?: NavigationMenuItem[]
-}
+  collapsed: boolean
+  children?: NavigationMenuItem<TExtra>[]
+} & TExtra
 ```
 
-Query it directly from the `navigation` collection in your frontend:
+Any extra fields added to `menu_item` via the `menuItem.fields` option are automatically included in each node. Use the `TExtra` generic to type them in your frontend:
 
 ```ts
+// If you added { name: 'badge', type: 'text' } to menuItem.fields:
+type MyNavItem = NavigationMenuItem<{ badge?: string }>
+
 const nav = await payload.find({
   collection: 'navigation',
   where: { slug: { equals: 'main' } },
 })
 
-const tree = nav.docs[0]?.items // NavigationMenuItem[]
+const tree = nav.docs[0]?.items as MyNavItem[]
 ```
 
 ## Link types
 
-| Type | Description |
-|---|---|
-| `url` | An absolute or relative web address |
+| Type       | Description                                       |
+| ---------- | ------------------------------------------------- |
+| `url`      | An absolute or relative web address               |
 | `internal` | A document from one of your `internalCollections` |
-| `custom` | Any string value (e.g. an anchor `#section`) |
-| `passive` | A label with no link (for parent-only items) |
+| `custom`   | Any string value (e.g. an anchor `#section`)      |
+| `passive`  | A label with no link (for parent-only items)      |
 
 ## React components
 
-If you want to embed the menu builder or tree elsewhere, components are exported from `@spon/payload-navigation/client`:
+Tree UI components are exported from `@spon/payload-navigation/client` for embedding in custom admin views:
 
 ```ts
-import { MenuBuilder, MenuTree, TreeItem, EditMenuItem, DeleteMenuItem } from '@spon/payload-navigation/client'
+import { MenuTree, TreeItem, DeleteMenuItem } from '@spon/payload-navigation/client'
 ```
 
 These are all client components (`'use client'`).

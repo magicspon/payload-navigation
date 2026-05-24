@@ -2,11 +2,15 @@
 
 import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import { monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
-import { useField } from '@payloadcms/ui'
+import { toast, useConfig, Button, Banner } from '@payloadcms/ui'
+import { stringify } from 'qs-esm'
 import * as React from 'react'
 
-import type { Item, Menu } from '../../types'
+import type { ID, Item, Menu } from '../../types'
 
+import { calculateUpdates } from '../../utils/calculateUpdates'
+
+import { coerceId } from '../../utils/coerceId'
 import { createTree, normalizeDepths } from '../../utils/createTree'
 import { isDescendant } from '../../utils/isDescendant'
 import { tree } from '../../utils/tree'
@@ -16,23 +20,72 @@ type Props = {
   initialDocs: Item[]
   internalCollections?: string[]
   maxDepth?: number
-  navigationHandle: string
+  navigationId: ID
 }
 
-export function MenuTreeClient({ initialDocs, internalCollections = [], navigationHandle }: Props) {
-  const { value: items, setValue: setJsonData } = useField<Menu[]>({ path: 'items' })
+export function MenuTreeClient({ initialDocs, navigationId }: Props) {
+  const { config } = useConfig()
+  const apiBase = `${config.serverURL}${config.routes.api}`
+
+  const [items, setItems] = React.useState<Menu[]>(() => createTree(initialDocs))
+  const [originalDocs, setOriginalDocs] = React.useState<Item[]>(initialDocs)
+  const [adding, setAdding] = React.useState(false)
+  const [pendingOpenId, setPendingOpenId] = React.useState<ID | null>(null)
 
   const itemsRef = React.useRef(items)
   React.useEffect(() => {
     itemsRef.current = items
   }, [items])
 
+  const originalDocsRef = React.useRef(originalDocs)
   React.useEffect(() => {
-    setJsonData(createTree(initialDocs))
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    originalDocsRef.current = originalDocs
+  }, [originalDocs])
+
+  const refresh = React.useCallback(async () => {
+    const query = stringify({
+      depth: 0,
+      limit: 500,
+      sort: '_order',
+      where: { navigation: { equals: navigationId } },
+    })
+    const res = await fetch(`${apiBase}/menu_item?${query}`, { credentials: 'include' })
+    if (!res.ok) return
+    const data = await res.json()
+    const docs = data.docs as Item[]
+    setItems(createTree(docs))
+    setOriginalDocs(docs)
+  }, [apiBase, navigationId])
+
+  const patchItem = React.useCallback(
+    async (update: { _order: string; id: ID; parent: null | ID }) => {
+      await fetch(`${apiBase}/menu_item/${update.id}`, {
+        body: JSON.stringify({ _order: update._order, parent: coerceId(update.parent) }),
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH',
+      })
+    },
+    [apiBase],
+  )
+
+  const applyReorder = React.useCallback(
+    async (newTree: Menu[]) => {
+      const updates = calculateUpdates(newTree, originalDocsRef.current)
+      if (updates.length === 0) return
+      try {
+        await Promise.all(updates.map(patchItem))
+        toast.success('Order saved')
+      } catch {
+        toast.error('Failed to save new order')
+      }
+      await refresh()
+    },
+    [patchItem, refresh],
+  )
 
   const handleDrop = React.useCallback(
-    (where: 'before' | 'after' | 'inside', sourceId: string, targetId: string) => {
+    (where: 'after' | 'before' | 'inside', sourceId: ID, targetId: ID) => {
       const current = itemsRef.current
       if (isDescendant(sourceId, targetId, current)) return
       const sourceItem = tree.find(current, sourceId)
@@ -43,7 +96,9 @@ export function MenuTreeClient({ initialDocs, internalCollections = [], navigati
         if (parent && parent.id === targetId) {
           let result = tree.remove(current, sourceId)
           result = tree.insertAfter(result, targetId, sourceItem)
-          setJsonData(normalizeDepths(result))
+          const newTree = normalizeDepths(result)
+          setItems(newTree)
+          void applyReorder(newTree)
           return
         }
       }
@@ -56,17 +111,19 @@ export function MenuTreeClient({ initialDocs, internalCollections = [], navigati
       } else {
         result = tree.insertAfter(result, targetId, sourceItem)
       }
-      setJsonData(normalizeDepths(result))
+      const newTree = normalizeDepths(result)
+      setItems(newTree)
+      void applyReorder(newTree)
     },
-    [setJsonData],
+    [applyReorder],
   )
 
   const handleMove = React.useCallback(
-    (id: string, direction: 'down' | 'up') => {
+    (id: ID, direction: 'down' | 'up') => {
       const current = itemsRef.current
       const parent = tree.findParent(current, id)
       const siblings = parent ? (parent.children ?? []) : current
-      const idx = siblings.findIndex((s) => s.id === id)
+      const idx = siblings.findIndex((s) => String(s.id) === String(id))
       if (idx === -1) return
 
       const targetIdx = direction === 'up' ? idx - 1 : idx + 1
@@ -81,18 +138,20 @@ export function MenuTreeClient({ initialDocs, internalCollections = [], navigati
         direction === 'up'
           ? tree.insertBefore(result, targetId, sourceItem)
           : tree.insertAfter(result, targetId, sourceItem)
-      setJsonData(normalizeDepths(result))
+      const newTree = normalizeDepths(result)
+      setItems(newTree)
+      void applyReorder(newTree)
     },
-    [setJsonData],
+    [applyReorder],
   )
 
   const handleUnnest = React.useCallback(
-    (sourceId: string, levelsUp: number) => {
+    (sourceId: ID, levelsUp: number) => {
       const current = itemsRef.current
       const sourceItem = tree.find(current, sourceId)
       if (!sourceItem) return
 
-      let currentId = sourceId
+      let currentId: ID = sourceId
       let ancestor: Menu | null | undefined
       for (let i = 0; i < levelsUp; i++) {
         ancestor = tree.findParent(current, currentId)
@@ -103,9 +162,11 @@ export function MenuTreeClient({ initialDocs, internalCollections = [], navigati
 
       let result = tree.remove(current, sourceId)
       result = tree.insertAfter(result, ancestor.id, sourceItem)
-      setJsonData(normalizeDepths(result))
+      const newTree = normalizeDepths(result)
+      setItems(newTree)
+      void applyReorder(newTree)
     },
-    [setJsonData],
+    [applyReorder],
   )
 
   React.useEffect(() => {
@@ -118,7 +179,7 @@ export function MenuTreeClient({ initialDocs, internalCollections = [], navigati
         const targetId = String((target.data as { id: string }).id)
 
         if (sourceId === targetId) {
-          const data = target.data as { unnest?: boolean; levelsUp?: number }
+          const data = target.data as { levelsUp?: number; unnest?: boolean }
           if (data.unnest && data.levelsUp) {
             handleUnnest(sourceId, data.levelsUp)
           }
@@ -137,35 +198,58 @@ export function MenuTreeClient({ initialDocs, internalCollections = [], navigati
     })
   }, [handleDrop, handleUnnest])
 
-  const handleItemMutated = React.useCallback(
-    (newTree: Menu[]) => {
-      setJsonData(newTree)
-    },
-    [setJsonData],
-  )
+  const handleAdd = React.useCallback(async () => {
+    setAdding(true)
+    try {
+      const res = await fetch(`${apiBase}/menu_item`, {
+        body: JSON.stringify({
+          navigation: coerceId(navigationId),
+          title: 'New item',
+          type: 'url',
+          url: '#',
+        }),
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      })
+      if (!res.ok) {
+        toast.error('Failed to add item')
+        return
+      }
+      const data = await res.json()
+      const newId: ID | undefined = data.doc?.id
+      await refresh()
+      if (newId) setPendingOpenId(newId)
+    } catch {
+      toast.error('Failed to add item')
+    } finally {
+      setAdding(false)
+    }
+  }, [apiBase, navigationId, refresh])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div>
-        {items?.map((item, idx) => (
+        {items.map((item, idx) => (
           <TreeItem
-            handle={navigationHandle}
-            internalCollections={internalCollections}
+            apiBase={apiBase}
+            autoOpen={pendingOpenId !== null && String(item.id) === String(pendingOpenId)}
             isFirst={idx === 0}
-            isLast={idx === (items?.length ?? 0) - 1}
+            isLast={idx === items.length - 1}
             item={item}
             key={item.id}
             level={0}
-            onDeleted={handleItemMutated}
+            onAutoOpened={() => setPendingOpenId(null)}
             onMove={handleMove}
-            onUpdated={handleItemMutated}
+            onRefresh={refresh}
           />
         ))}
-        {(!items || items.length === 0) && (
-          <p style={{ color: 'var(--theme-elevation-500)', fontSize: '0.875rem' }}>
-            No menu items yet. Add one using the form in the sidebar.
-          </p>
-        )}
+        {items.length === 0 && <Banner type="error">No menu items yet.</Banner>}
+      </div>
+      <div>
+        <Button disabled={adding} onClick={handleAdd} type="button">
+          {adding ? 'Adding…' : '+ Add item'}
+        </Button>
       </div>
     </div>
   )

@@ -1,20 +1,29 @@
-import type { NavigationMenuItem, Item, Menu } from '../types'
+import type { NavigationMenuItem, Item, Menu, ID } from '../types'
+import { coerceId } from '../utils/coerceId'
 
-function getParentId(item: Item): null | string {
-  if (item.parent === null || item.parent === undefined) {return null}
-  if (typeof item.parent === 'string') {return item.parent}
-  if (typeof item.parent === 'object' && 'id' in item.parent) {return String(item.parent.id)}
-  return null
+function getParentId(item: Item): null | ID {
+  if (item.parent === null || item.parent === undefined) {
+    return null
+  }
+
+  if (typeof item.parent === 'object' && 'id' in item.parent) {
+    return coerceId(item.parent.id)
+  }
+  return coerceId(item.parent)
 }
 
-function buildChildren(parentId: null | string, items: Item[], level: number): Menu[] {
+function sameParent(a: null | ID, b: null | ID): boolean {
+  if (a === null || b === null) return a === b
+  return String(a) === String(b)
+}
+
+function buildChildren(parentId: null | ID, items: Item[], level: number): Menu[] {
   return items
-    .filter((item) => getParentId(item) === parentId)
+    .filter((item) => sameParent(getParentId(item), parentId))
     .map((item) => ({
       ...item,
-      id: String(item.id),
       depth: level,
-      children: buildChildren(String(item.id), items, level + 1),
+      children: buildChildren(item.id, items, level + 1),
     }))
 }
 
@@ -22,27 +31,55 @@ export function createTree(items: Item[]): Menu[] {
   return buildChildren(null, items, 0)
 }
 
-function buildCleanChildren(parentId: null | string, items: Item[], level: number): NavigationMenuItem[] {
+const EXCLUDED_FIELDS = new Set([
+  '_order',
+  'collapsed',
+  'custom',
+  'depth',
+  'href',
+  'id',
+  'internal',
+  'navigation',
+  'parent',
+  'passive',
+  'title',
+  'type',
+  'url',
+])
+
+function buildCleanChildren<TExtra extends Record<string, unknown>>(
+  parentId: null | ID,
+  items: Item[],
+  level: number,
+): NavigationMenuItem<TExtra>[] {
   return items
-    .filter((item) => getParentId(item) === parentId)
+    .filter((item) => sameParent(getParentId(item), parentId))
     .map((item) => {
-      const children = buildCleanChildren(item.id, items, level + 1)
-      const clean: NavigationMenuItem = {
+      const children = buildCleanChildren<TExtra>(item.id, items, level + 1)
+      const extra = Object.fromEntries(
+        Object.entries(item).filter(([key]) => !EXCLUDED_FIELDS.has(key)),
+      ) as TExtra
+      const clean: NavigationMenuItem<TExtra> = {
+        ...extra,
         id: item.id,
         type: (item.type as string) ?? '',
         collapsed: item.collapsed ?? false,
         depth: level,
         parent: getParentId(item),
         title: item.title,
-        href: item.value ?? '',
+        href: item.href ?? '',
       }
-      if (children.length > 0) {clean.children = children}
+      if (children.length > 0) {
+        clean.children = children
+      }
       return clean
     })
 }
 
-export function createCleanTree(items: Item[]): NavigationMenuItem[] {
-  return buildCleanChildren(null, items, 0)
+export function createCleanTree<TExtra extends Record<string, unknown> = Record<string, never>>(
+  items: Item[],
+): NavigationMenuItem<TExtra>[] {
+  return buildCleanChildren<TExtra>(null, items, 0)
 }
 
 export function normalizeDepths(nodes: Menu[], level = 0): Menu[] {

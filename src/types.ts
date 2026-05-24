@@ -2,33 +2,20 @@ import type { BasePayload, CollectionConfig, CollectionSlug } from 'payload'
 
 export type MenuItemType = 'custom' | 'internal' | 'passive' | 'url'
 
-export type FormData = {
-  custom?: string
-  internal?: string
-  parent?: null | string
-  passive?: string
-  relationTo?: string
-  title: string
-  type: MenuItemType
-  url?: string
-}
-
-export type NavigationAccess = {
-  menuItem?: CollectionConfig['access']
-  navigation?: CollectionConfig['access']
-}
+export type ID = string | number
 
 export type ResolveInternalUrl = (args: {
   collection: CollectionSlug
-  id: string
+  id: ID
   payload: BasePayload
 }) => Promise<string>
 
 export type NavigationPluginConfig = {
-  access?: NavigationAccess
   disabled?: boolean
   internalCollections?: CollectionSlug[]
   maxDepth?: number
+  menuItem?: Omit<Partial<CollectionConfig>, 'slug'>
+  navigation?: Omit<Partial<CollectionConfig>, 'slug'>
   resolveInternalUrl?: ResolveInternalUrl
 }
 
@@ -38,31 +25,31 @@ export type Item = {
   collapsed?: boolean | null
   custom?: null | string
   depth?: null | number
-  handle: string
-  id: string
+  href?: null | string
+  id: ID
   internal?: {
     relationTo?: string
-    value?: { id: string } | null | string
+    value?: { id: ID } | null | string
   } | null
-  parent?: { id: string } | null | string
+  navigation?: { id: ID } | null | string
+  parent?: { id: ID } | null | string
   passive?: null | string
   title: string
   type?: MenuItemType | null
   url?: null | string
-  value?: null | string
 }
 
 export type Menu = {
   children?: Menu[]
 } & Item
 
-export type NavigationMenuItem = {
-  children?: NavigationMenuItem[]
+export type NavigationMenuItem<TExtra extends Record<string, unknown> = Record<string, never>> = {
+  children?: NavigationMenuItem<TExtra>[]
   collapsed?: boolean
   depth: number
   href: string
-  id: string
-  parent: null | string
+  id: ID
+  parent: null | ID
   title: string
   type: string
-}
+} & TExtra
