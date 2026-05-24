@@ -2,16 +2,7 @@ import type { BasePayload, CollectionConfig, CollectionSlug } from 'payload'
 
 export type MenuItemType = 'custom' | 'internal' | 'passive' | 'url'
 
-export type FormData = {
-  custom?: string
-  internal?: string
-  parent?: null | string
-  passive?: string
-  relationTo?: string
-  title: string
-  type: MenuItemType
-  url?: string
-}
+export type ID = string | number
 
 export type NavigationAccess = {
   menuItem?: CollectionConfig['access']
@@ -20,7 +11,7 @@ export type NavigationAccess = {
 
 export type ResolveInternalUrl = (args: {
   collection: CollectionSlug
-  id: string
+  id: ID
   payload: BasePayload
 }) => Promise<string>
 
@@ -38,18 +29,18 @@ export type Item = {
   collapsed?: boolean | null
   custom?: null | string
   depth?: null | number
-  handle: string
-  id: string
+  href?: null | string
+  id: ID
   internal?: {
     relationTo?: string
-    value?: { id: string } | null | string
+    value?: { id: ID } | null | string
   } | null
-  parent?: { id: string } | null | string
+  navigation?: { id: ID } | null | string
+  parent?: { id: ID } | null | string
   passive?: null | string
   title: string
   type?: MenuItemType | null
   url?: null | string
-  value?: null | string
 }
 
 export type Menu = {
@@ -61,8 +52,8 @@ export type NavigationMenuItem = {
   collapsed?: boolean
   depth: number
   href: string
-  id: string
-  parent: null | string
+  id: ID
+  parent: null | ID
   title: string
   type: string
 }

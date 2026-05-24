@@ -1,12 +1,15 @@
-import type { UIFieldServerProps } from 'payload'
+import type { BasePayload } from 'payload'
 
 import type { Item } from '../../types'
 
 import { MenuTreeClient } from './MenuTreeClient'
+import { Banner } from '@payloadcms/ui'
 
-type Props = UIFieldServerProps & {
+type Props = {
+  data?: Record<string, unknown>
   internalCollections?: string[]
   maxDepth?: number
+  payload: BasePayload
 }
 
 export async function MenuTreeServer({
@@ -15,9 +18,10 @@ export async function MenuTreeServer({
   maxDepth = 3,
   payload,
 }: Props) {
-  const handle = (data as Record<string, unknown>)?.handle as string | undefined
-  if (!handle) {
-    return null
+  const navigationId = (data as Record<string, unknown>)?.id as string | undefined
+
+  if (!navigationId) {
+    return <Banner type="info">Save this navigation first to start managing menu items.</Banner>
   }
 
   const result = await payload.find({
@@ -26,7 +30,7 @@ export async function MenuTreeServer({
     limit: 500,
     overrideAccess: true,
     sort: '_order',
-    where: { handle: { equals: handle } },
+    where: { navigation: { equals: navigationId } },
   })
 
   return (
@@ -34,7 +38,7 @@ export async function MenuTreeServer({
       initialDocs={result.docs as unknown as Item[]}
       internalCollections={internalCollections}
       maxDepth={maxDepth}
-      navigationHandle={handle}
+      navigationId={navigationId}
     />
   )
 }

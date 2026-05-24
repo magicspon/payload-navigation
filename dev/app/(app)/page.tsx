@@ -2,23 +2,27 @@ import { notFound } from 'next/navigation'
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
-
-
 export default async function FormPage() {
-	const payload = await getPayload({ config })
+  const payload = await getPayload({ config })
 
-	const nav = await payload
-		.find({
-			collection: 'navigation',
-		})
-		.then((resp) => resp.docs?.[0])
-		.catch(() => null)
+  const nav = await payload
+    .find({
+      collection: 'navigation',
+      where: {
+        slug: { equals: 'test-menu' },
+      },
+      overrideAccess: true,
+    })
+    .then((resp) => resp)
+    .catch(() => null)
 
-	if (!nav) {notFound()}
+  if (!nav) {
+    notFound()
+  }
 
-	return (
-		<div className="max-w-3xl mx-auto px-4 py-8">
-			<pre>{JSON.stringify(nav.items, null, 2)}</pre>
-		</div>
-	)
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      <pre>{JSON.stringify({ nav }, null, 2)}</pre>
+    </div>
+  )
 }

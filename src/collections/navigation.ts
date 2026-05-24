@@ -1,6 +1,8 @@
 import { slugField, type CollectionConfig } from 'payload'
 
-import type { NavigationPluginConfig } from '../types'
+import type { Item, NavigationPluginConfig } from '../types'
+
+import { createCleanTree } from '../utils/createTree'
 
 export const createNavigationCollection = (
   pluginConfig: NavigationPluginConfig,
@@ -20,31 +22,10 @@ export const createNavigationCollection = (
     },
     fields: [
       { name: 'title', type: 'text', required: true },
-			slugField({ position: 'sidebar', useAsSlug: 'title', }),
+      slugField({ position: 'sidebar', useAsSlug: 'title' }),
       {
-        name: 'handle',
-        type: 'text',
-        admin: { hidden: true },
-        defaultValue: () => crypto.randomUUID(),
-        required: true,
-        unique: true,
-      },
-      {
-        name: 'menu',
-        type: 'ui',
-        admin: {
-          components: {
-            Field: {
-              clientProps: { internalCollections, maxDepth },
-              path: '@spon/payload-navigation/client#MenuBuilder',
-            },
-          },
-          position: 'sidebar',
-        },
-      },
-      {
-        name: 'tree',
-        type: 'ui',
+        name: 'items',
+        type: 'json',
         admin: {
           components: {
             Field: {
@@ -53,29 +34,37 @@ export const createNavigationCollection = (
             },
           },
         },
-      },
-      {
-        name: 'items',
-        type: 'json',
-        admin: { hidden: false, readOnly: true },
-        typescriptSchema: [() => ({ type: 'array', items: { $ref: '#/definitions/NavigationMenuItem' } })],
+        typescriptSchema: [
+          () => ({ type: 'array', items: { $ref: '#/definitions/NavigationMenuItem' } }),
+        ],
+        hooks: {
+          afterRead: [
+            async ({ originalDoc, req }) => {
+              const result = await req.payload.find({
+                collection: 'menu_item',
+                depth: 1,
+                limit: 500,
+                sort: '_order',
+                where: { navigation: { equals: originalDoc.id } },
+                select: {
+                  parent: true,
+                  title: true,
+                },
+              })
+              return createCleanTree(result.docs as unknown as Item[])
+            },
+          ],
+        },
       },
     ],
     hooks: {
       beforeDelete: [
-        async ({ id, req: { payload } }) => {
-          const doc = await payload.findByID({
-            id,
-            collection: 'navigation',
-            depth: 0,
-            select: { handle: true },
+        async ({ id, req }) => {
+          await req.payload.delete({
+            collection: 'menu_item',
+            req,
+            where: { navigation: { equals: id } },
           })
-          if (doc?.handle) {
-            await payload.delete({
-              collection: 'menu_item',
-              where: { handle: { equals: doc.handle } },
-            })
-          }
         },
       ],
     },
