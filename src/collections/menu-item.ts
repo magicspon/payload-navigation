@@ -23,7 +23,7 @@ export const createMenuItemCollection = (
     admin: {
       defaultColumns: ['title', 'type', 'navigation'],
       group: 'Navigation',
-      hidden: false,
+      hidden: true,
       useAsTitle: 'title',
     },
     fields: [
