@@ -6,7 +6,7 @@ import type { ID, NavigationPluginConfig } from './types'
 import { createMenuItemCollection } from './collections/menu-item'
 import { createNavigationCollection } from './collections/navigation'
 
-export type { NavigationPluginConfig } from './types'
+export type { NavigationPluginConfig, ResolveInternalUrl } from './types'
 export type { Item, Menu, MenuItemType, NavigationMenuItem } from './types'
 
 export const navigationPlugin =

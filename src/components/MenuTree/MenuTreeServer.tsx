@@ -26,7 +26,7 @@ export async function MenuTreeServer({
 
   const result = await payload.find({
     collection: 'menu_item',
-    depth: 1,
+    depth: 0,
     limit: 500,
     overrideAccess: true,
     sort: '_order',

@@ -44,7 +44,7 @@ export function MenuTreeClient({ initialDocs, navigationId }: Props) {
 
   const refresh = React.useCallback(async () => {
     const query = stringify({
-      depth: 1,
+      depth: 0,
       limit: 500,
       sort: '_order',
       where: { navigation: { equals: navigationId } },
