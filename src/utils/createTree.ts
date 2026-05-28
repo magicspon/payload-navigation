@@ -89,3 +89,13 @@ export function normalizeDepths(nodes: Menu[], level = 0): Menu[] {
     children: node.children?.length ? normalizeDepths(node.children, level + 1) : node.children,
   }))
 }
+
+/**
+ * Returns true if any node sits at or beyond `maxDepth` levels deep (0-indexed),
+ * matching the server-side guard in the menu_item beforeChange hook.
+ */
+export function exceedsMaxDepth(nodes: Menu[], maxDepth: number, level = 0): boolean {
+  return nodes.some(
+    (node) => level >= maxDepth || exceedsMaxDepth(node.children ?? [], maxDepth, level + 1),
+  )
+}

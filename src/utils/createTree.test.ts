@@ -2,7 +2,9 @@ import { describe, expect, test } from 'vitest'
 
 import type { Item } from '../types'
 
-import { createCleanTree, createTree } from './createTree'
+import type { Menu } from '../types'
+
+import { createCleanTree, createTree, exceedsMaxDepth } from './createTree'
 
 const items: Item[] = [
   { id: '1', type: 'url', depth: 0, parent: null, title: 'Home', href: '/' },
@@ -58,5 +60,31 @@ describe('createCleanTree', () => {
 
     const about = tree.find((i) => i.id === '2')
     expect(about?.children).toHaveLength(2)
+  })
+})
+
+describe('exceedsMaxDepth', () => {
+  const nested: Menu[] = [
+    {
+      id: '1',
+      title: 'a',
+      depth: 0,
+      parent: null,
+      children: [{ id: '2', title: 'b', depth: 1, parent: '1', children: [{ id: '3', title: 'c', depth: 2, parent: '2' }] }],
+    },
+  ]
+
+  test('allows depths within the limit (0-indexed)', () => {
+    // levels 0, 1, 2 present -> fits within maxDepth 3
+    expect(exceedsMaxDepth(nested, 3)).toBe(false)
+  })
+
+  test('flags a tree deeper than the limit', () => {
+    // levels 0, 1, 2 present -> exceeds maxDepth 2 (only levels 0,1 allowed)
+    expect(exceedsMaxDepth(nested, 2)).toBe(true)
+  })
+
+  test('returns false for an empty tree', () => {
+    expect(exceedsMaxDepth([], 3)).toBe(false)
   })
 })

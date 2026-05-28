@@ -27,8 +27,8 @@ export async function MenuTreeServer({
   const result = await payload.find({
     collection: 'menu_item',
     depth: 0,
-    limit: 500,
     overrideAccess: true,
+    pagination: false,
     sort: '_order',
     where: { navigation: { equals: navigationId } },
   })

@@ -11,7 +11,7 @@ import type { ID, Item, Menu } from '../../types'
 import { calculateUpdates } from '../../utils/calculateUpdates'
 
 import { coerceId } from '../../utils/coerceId'
-import { createTree, normalizeDepths } from '../../utils/createTree'
+import { createTree, exceedsMaxDepth, normalizeDepths } from '../../utils/createTree'
 import { isDescendant } from '../../utils/isDescendant'
 import { tree } from '../../utils/tree'
 import { TreeItem } from '../TreeItem/TreeItem'
@@ -23,7 +23,7 @@ type Props = {
   navigationId: ID
 }
 
-export function MenuTreeClient({ initialDocs, navigationId }: Props) {
+export function MenuTreeClient({ initialDocs, maxDepth = 3, navigationId }: Props) {
   const { config } = useConfig()
   const apiBase = `${config.serverURL}${config.routes.api}`
 
@@ -45,7 +45,7 @@ export function MenuTreeClient({ initialDocs, navigationId }: Props) {
   const refresh = React.useCallback(async () => {
     const query = stringify({
       depth: 0,
-      limit: 500,
+      limit: 0,
       sort: '_order',
       where: { navigation: { equals: navigationId } },
     })
@@ -59,12 +59,13 @@ export function MenuTreeClient({ initialDocs, navigationId }: Props) {
 
   const patchItem = React.useCallback(
     async (update: { _order: string; id: ID; parent: null | ID }) => {
-      await fetch(`${apiBase}/menu_item/${update.id}`, {
+      const res = await fetch(`${apiBase}/menu_item/${update.id}`, {
         body: JSON.stringify({ _order: update._order, parent: coerceId(update.parent) }),
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         method: 'PATCH',
       })
+      if (!res.ok) throw new Error(`Failed to update item ${update.id}`)
     },
     [apiBase],
   )
@@ -74,7 +75,11 @@ export function MenuTreeClient({ initialDocs, navigationId }: Props) {
       const updates = calculateUpdates(newTree, originalDocsRef.current)
       if (updates.length === 0) return
       try {
-        await Promise.all(updates.map(patchItem))
+        // Apply sequentially in parent-before-child order so each item's depth is
+        // recomputed from an already-persisted parent (calculateUpdates emits parents first).
+        for (const update of updates) {
+          await patchItem(update)
+        }
         toast.success('Order saved')
       } catch {
         toast.error('Failed to save new order')
@@ -82,6 +87,18 @@ export function MenuTreeClient({ initialDocs, navigationId }: Props) {
       await refresh()
     },
     [patchItem, refresh],
+  )
+
+  const commit = React.useCallback(
+    (newTree: Menu[]) => {
+      if (exceedsMaxDepth(newTree, maxDepth)) {
+        toast.error(`Maximum nesting depth of ${maxDepth} reached`)
+        return
+      }
+      setItems(newTree)
+      void applyReorder(newTree)
+    },
+    [applyReorder, maxDepth],
   )
 
   const handleDrop = React.useCallback(
@@ -96,9 +113,7 @@ export function MenuTreeClient({ initialDocs, navigationId }: Props) {
         if (parent && parent.id === targetId) {
           let result = tree.remove(current, sourceId)
           result = tree.insertAfter(result, targetId, sourceItem)
-          const newTree = normalizeDepths(result)
-          setItems(newTree)
-          void applyReorder(newTree)
+          commit(normalizeDepths(result))
           return
         }
       }
@@ -111,11 +126,9 @@ export function MenuTreeClient({ initialDocs, navigationId }: Props) {
       } else {
         result = tree.insertAfter(result, targetId, sourceItem)
       }
-      const newTree = normalizeDepths(result)
-      setItems(newTree)
-      void applyReorder(newTree)
+      commit(normalizeDepths(result))
     },
-    [applyReorder],
+    [commit],
   )
 
   const handleMove = React.useCallback(
@@ -138,11 +151,9 @@ export function MenuTreeClient({ initialDocs, navigationId }: Props) {
         direction === 'up'
           ? tree.insertBefore(result, targetId, sourceItem)
           : tree.insertAfter(result, targetId, sourceItem)
-      const newTree = normalizeDepths(result)
-      setItems(newTree)
-      void applyReorder(newTree)
+      commit(normalizeDepths(result))
     },
-    [applyReorder],
+    [commit],
   )
 
   const handleUnnest = React.useCallback(
@@ -162,11 +173,9 @@ export function MenuTreeClient({ initialDocs, navigationId }: Props) {
 
       let result = tree.remove(current, sourceId)
       result = tree.insertAfter(result, ancestor.id, sourceItem)
-      const newTree = normalizeDepths(result)
-      setItems(newTree)
-      void applyReorder(newTree)
+      commit(normalizeDepths(result))
     },
-    [applyReorder],
+    [commit],
   )
 
   React.useEffect(() => {

@@ -147,10 +147,14 @@ export function TreeItem({
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       method: 'PATCH',
-    }).catch(() => {
-      setCollapsed(!next)
-      toast.error('Failed to save')
     })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to save')
+      })
+      .catch(() => {
+        setCollapsed(!next)
+        toast.error('Failed to save')
+      })
   }
 
   return (
