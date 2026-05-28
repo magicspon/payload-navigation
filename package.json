@@ -1,7 +1,7 @@
 {
   "name": "@spon/payload-navigation",
-  "version": "0.1.0",
-  "description": "A Payload CMS plugin for building drag-and-drop navigation menus.",
+  "version": "0.4.0",
+  "description": "A blank template to get started with Payload 3.0",
   "license": "MIT",
   "type": "module",
   "exports": {
