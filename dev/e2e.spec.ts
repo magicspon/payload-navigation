@@ -11,7 +11,14 @@ function getDrawer(page: Page) {
 async function selectOption(control: Locator, page: Page, optionText: string) {
   await control.waitFor({ state: 'visible' })
   await control.click()
-  await page.locator('.rs__option', { hasText: optionText }).first().click()
+  // Wait for the dropdown to actually open before clicking, otherwise the option
+  // click can land mid-render and react-select drops the selection.
+  const option = page.locator('.rs__menu .rs__option', { hasText: optionText }).first()
+  await option.waitFor({ state: 'visible' })
+  await option.click()
+  // The menu unmounts once the value commits — wait for that so dependent
+  // conditional fields have re-rendered before the next interaction.
+  await page.locator('.rs__menu').first().waitFor({ state: 'detached' })
 }
 
 async function login(request: APIRequestContext): Promise<string> {

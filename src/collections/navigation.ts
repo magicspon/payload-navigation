@@ -54,7 +54,7 @@ export const createNavigationCollection = (
               const result = await req.payload.find({
                 collection: 'menu_item',
                 depth: 0,
-                limit: 500,
+                pagination: false,
                 sort: '_order',
                 where: { navigation: { equals: originalDoc.id } },
               })

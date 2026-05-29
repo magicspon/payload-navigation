@@ -25,8 +25,10 @@ export const createMenuItemCollection = (
   return {
     slug: 'menu_item',
     labels: { plural: 'Menu Items', singular: 'Menu Item' },
-    orderable: true,
     ...menuItemRest,
+    // `orderable` is required for the drag-and-drop `_order` field; keep it after the
+    // consumer spread so it can't be accidentally disabled.
+    orderable: true,
     access: {
       read: () => true,
       ...(extraAccess ?? {}),
@@ -182,7 +184,8 @@ export const createMenuItemCollection = (
           } else if (data?.type === 'custom') {
             data.href = data.custom ?? ''
           } else if (data?.type === 'passive') {
-            data.href = data.passive ?? ''
+            // Passive items are labels only — they never produce a link.
+            data.href = ''
           }
 
           if (data?.parent) {
@@ -201,20 +204,13 @@ export const createMenuItemCollection = (
       ],
       beforeDelete: [
         async ({ id, req }) => {
-          const { docs: children } = await req.payload.find({
+          // Delete all direct children; each deletion re-runs this hook and
+          // cascades to its own descendants. `where` avoids any row-count cap.
+          await req.payload.delete({
             collection: 'menu_item',
-            depth: 0,
-            limit: 500,
             req,
             where: { parent: { equals: id } },
           })
-          for (const child of children) {
-            await req.payload.delete({
-              collection: 'menu_item',
-              id: child.id,
-              req,
-            })
-          }
         },
         ...(extraHooks?.beforeDelete ?? []),
       ],
